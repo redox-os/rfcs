@@ -11,6 +11,9 @@ permissions in Redox OS. This proposal is designed to minimize the required
 kernel-level support, rather expecting that most of the feature is implemented
 in userspace.
 
+This proposal is inspired in part by similar mechanisms in Capsicum (https://www.cl.cam.ac.uk/research/security/capsicum/)
+and Sel4 (http://sel4.net/Info/Docs/seL4-manual-1.0.4.pdf).
+
 # Motivation
 [motivation]: #motivation
 
