@@ -115,7 +115,7 @@ The full path of the file is `"file:users/potus/mail/*.txt:r"`. We will
 see below how `pid` can provide this file.
 
 The second call, `File::open_at(cap, "file:users/potus/mail/confidential.txt", ...)`
-is requests the opening of `"file:users/potus/mail/confidential.txt"` and provides
+requests the opening of `"file:users/potus/mail/confidential.txt"` and provides
 a proof that the context has been granted capability `cap`.
 
 The following snippet demonstrates a process granting a capability to another process
@@ -134,7 +134,7 @@ fn honeypot() {
 }
 ```
 
-Again, `File::dup_to` is not limited to capabilities. The OS keeps track of
+Again, `File::dup_to` is not limited to capabilities. The scheme keeps track of
 open files (including capabilities) and how they are duped across processes.
 
 Note that `dup_from`/`dup_to` do _not_ constitute a rendez-vous mechanism nor
