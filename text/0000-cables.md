@@ -45,8 +45,6 @@ _P_ and _Q_ willing to initiate the communication.
 The following is pseudo code, slightly simplified from the usual file API:
 
 ```rust
-struct 
-
 fn main() {
   let cable = File::open("cable:some/optional/path").unwrap();
   let pid = Process::fork().unwrap();
@@ -111,6 +109,40 @@ anymore? when should cleanup take place?) and in userspace (where, depending
 on the allocation strategy for pids, an attacker with the ability to use
 `kill` and `fork` could impersonate as another process, intercepting or forging
 file descriptors).
+
+## Generic mechanism
+
+Instead of hardcoding the format of message to one file descriptor + one buffer,
+we could aim for something more powerful (and eventually extensible), with an
+intended high-level API along the lines of:
+
+```rust
+// Send a file descriptor.
+cable.send(key, &[File(fd)]).unwrap();
+// Send some binary.
+cable.send(key, &[Binary(buf)]).unwrap();
+// Send several items at once.
+cable.send(key, &[File(fd1), Binary(buf), Binary(buf2), File(fd2)]).unwrap();
+
+// Possibly other cases. I can't think of any, though.
+
+// Receive
+if let Some(key, data) = cable.receive() {
+  // `data` is `Box<[File|Binary]>`.
+}
+```
+
+This would serve as a good base for a high-level (typed) IPC mechanism.
+
+## Performing key matching in the scheme
+
+An obvious variant would be to let the scheme implementation perform the
+matching on key, instead of expecting just about every single client to
+do it.
+
+This choice was made because 1/ matching shouldn't be very hard; 2/ keeping
+it out of the kernel is one less thing to worry about. This doesn't mean that
+it's written in stone.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
