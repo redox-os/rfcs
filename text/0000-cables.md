@@ -26,12 +26,14 @@ is both minimal and secure.
 We introduce a new scheme, `cable:`. Files of scheme `cable`
 behave essentially as regular pipes, with one major difference: each message
 sent across a `cable` consist in exactly:
-- a file descriptor; and
-- a key, used to (de)multiplex messages.
+- a key, typically used to (de)multiplex messages; and
+- a set of file descriptor; and
+- a binary value.
 
-The file descriptor is transparently duplicated during the communication. A
-sending process _P_ passes as argument to `write` a file descriptor valid in
-_P_. A receiving process _Q_ receives from `read` a file descriptor valid in
+
+The file descriptors are transparently duplicated during the communication. A
+sending process _P_ passes as argument to `write` files descriptors valid in
+_P_. A receiving process _Q_ receives from `read` files descriptors valid in
 _Q_.
 
 As instances of `cable` are represented in userspace as file descriptors, they
@@ -42,11 +44,9 @@ _P_ and _Q_ willing to initiate the communication.
 
 ## Example
 
-The following is pseudo code, slightly simplified from the usual file API:
-
 ```rust
 fn main() {
-  let cable = File::open("cable:some/optional/path").unwrap();
+  let cable = Cable::open("cable:").unwrap(); // Empty path.
   let pid = Process::fork().unwrap();
   if pid == 0 {
     // Child process.
@@ -54,11 +54,13 @@ fn main() {
     // running unprivileged and has somehow dropped rights to open
     // files.
 
-    // Receive a `File` object from `cable`.
-    let mut fd : usize = 0;
-    let mut key: [u8, 32] = [...];
-    cable.read(&mut fd, &mut key).unwrap();
-    assert_eq!(key, b"private key"); // The key is typically used to demultiplex messages≥
+    // Receive data from `cable`.
+    if let Ok(message) = cable.read() {
+      assert_eq!(message.files.len(), 1);
+      assert_eq!(message.data.len(), 0);
+      assert_eq!(message.key, b"private key"); // The key is typically used to demultiplex messages.
+      // ...
+    }
   } else {
     // Parent process.
     // For this example, it behaves as a sandbox.
@@ -67,19 +69,27 @@ fn main() {
     let file = File::open("file:user/potus/mail/privkey.txt").unwrap();
 
     // Now send the file to the other process.
-    cable.write(fd, "private key").unwrap();
+    cable.write(CableMessage {
+      files: [fd],
+      key: b"private key",
+      data: []
+    }).unwrap();
   }
 }
 ```
 
 ## Technical details
 
-If successful, a `write` on a `cable` will cause the file descriptor to be
-duplicated. If the file descriptor cannot be duplicated, the call to `write`
-fails. The call to `read` does not cause a second duplication.
+If successful, a `write` on a `cable` will cause the file descriptors to be
+duplicated. If any of the file descriptors cannot be duplicated, the call to
+`write` fails. The call to `read` does not cause a second duplication.
 
 When a `cable` is closed, any file descriptor that it may be keeping alive
 (i.e. a `write` has happened but no `read`) is closed asynchronously.
+
+In the current document, cables MUST have an empty path. Followup RFCs may
+introduce a semantics for non-empty path, but this is beyond the scope of this
+document.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -110,29 +120,16 @@ on the allocation strategy for pids, an attacker with the ability to use
 `kill` and `fork` could impersonate as another process, intercepting or forging
 file descriptors).
 
-## Generic mechanism
+## Cables-based IPC
 
-Instead of hardcoding the format of message to one file descriptor + one buffer,
-we could aim for something more powerful (and eventually extensible), with an
-intended high-level API along the lines of:
+Cables could be used as a full-blown IPC mechanism. This is probably a bad idea
+for performance, as it means that any IPC call would need to perfom syscalls.
+A better IPC design would use shared memory, futex-style mostly-userspace
+locking and only fallback to cables if file descriptors need to be sent.
 
-```rust
-// Send a file descriptor.
-cable.send(key, &[File(fd)]).unwrap();
-// Send some binary.
-cable.send(key, &[Binary(buf)]).unwrap();
-// Send several items at once.
-cable.send(key, &[File(fd1), Binary(buf), Binary(buf2), File(fd2)]).unwrap();
+For this reason, we do not plan to extend Cables further towards implementing
+IPC.
 
-// Possibly other cases. I can't think of any, though.
-
-// Receive
-if let Some(key, data) = cable.receive() {
-  // `data` is `Box<[File|Binary]>`.
-}
-```
-
-This would serve as a good base for a high-level (typed) IPC mechanism.
 
 ## Performing key matching in the scheme
 
@@ -140,9 +137,12 @@ An obvious variant would be to let the scheme implementation perform the
 matching on key, instead of expecting just about every single client to
 do it.
 
-This choice was made because 1/ matching shouldn't be very hard; 2/ keeping
-it out of the kernel is one less thing to worry about. This doesn't mean that
-it's written in stone.
+We decide to NOT head in this direction because:
+
+- matching in userspace isn't very hard, so matching in the kernel is probably
+  not very useful;
+- we believe that matching in kernel encourages placing numerous expensive
+  syscalls, which could easily be avoided by keeping the matching in userspace.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
