@@ -43,3 +43,4 @@ There aren't any real drawbacks to this. It's a solid, easily extendible IPC mec
 - Should it implement sending file descriptors? If so, how?
 - Should it use shared memory?
 - Should processes be allowed to say that only processes with certain permissions can connect?
+- Should this be implemented in the kernel or as a userspace daemon?
