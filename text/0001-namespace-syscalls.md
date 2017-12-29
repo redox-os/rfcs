@@ -1,7 +1,7 @@
 - Feature Name: namespace-syscalls
 - Start Date: 2016-11-23
-- RFC PR: (leave this empty)
-- Redox Issue: (leave this empty)
+- RFC PR: https://github.com/redox-os/rfcs/pull/4
+- Redox Issue: N/A
 
 # Summary
 [summary]: #summary
