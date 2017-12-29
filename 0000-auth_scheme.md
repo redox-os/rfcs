@@ -19,8 +19,12 @@ redox_users was proving to have some complications (see Alternatives) that using
 
 The current design is comprised of a single scheme, `auth:` that provides a large number of urls. This may not be an entirely comprehensive list of all the nessasary functionality.
 
+### Definitions
 In this documentation, `login-name` is used as the name of the user that is inputted into login fields, and `comment` is used as the long username, the one that apears in a login-manager, for example.
 
+"Open Perms" sections list the accepted flags and userids allowed for a specific URL.
+
+### Interface
 * `auth:/` - Open returns error
   * `user/` - Interface for Mapping of all login-names to userids, like so:
     ```
@@ -30,12 +34,76 @@ In this documentation, `login-name` is used as the name of the user that is inpu
     Only openable in read mode. Any user on the system has access. Also a part of deeper URL's:
     
     * `<login-name>/`
-      Calling read on this url provides a semicolon-delimited list of all user information:
+    
+      Open Perms:
+      ```
+      Read  -> Any
+      Write -> root or <login-name>
+      ```
+    
+      Read provides a semicolon-delimited list of all user information:
+      
       ```
       <login-name>;<uid>;<primary-gid>;<comment>;<home-dir>;<login-shell>
       ```
-      Calling write on this url takes a semicolon delimited list of user information, as above, and throws an error if the list is not valid.
-      * 
+      Write takes a semicolon delimited list of user information, as above, and returns an error if the list is not valid. Also a part of deeper urls:
+        * `auth` - Authorization provider for users
+          
+          Open Perms:
+          ```
+          Read  -> root
+          Write -> root
+          ```
+          
+          Authorizing a user is comprised of the following steps:
+          * Open the `auth` file for the appropriate user
+          * Write the plaintext password
+          * Subsequently call Read for a `0` or `1`
+        * `uid` - Provides user id
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root or <login-name>
+          ```
+          
+          Read or Write an unsigned 32-bit integer for the user id
+        * `gid` - Provides primary group id
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root or <login-name>
+          ```
+          
+          Read or Write an unsigned 32-bit integer for the primary group id
+        * `name` - The long form of the user's name (can include any valid utf-8)
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root or <login-name>
+          ```
+          
+          Read or Write a valid utf-8 series of bytes
+        * `home` - Home directory (a URL)
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root or <login-name>
+          ```
+          
+          Read or Write a valid URL (a string)
+        * `shell` - Login Shell (a URL)
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root or <login-name>
+          ```
+          
+          Read or Write a valid URL (a string)
   * `group/` - Inteface for Mapping of all groupnames to groupids, like so:
     ```
     root:0
@@ -43,29 +111,79 @@ In this documentation, `login-name` is used as the name of the user that is inpu
     user:1000
     ```
     * `<groupname>/`
-      Calling read on this url provides a semicolon-delimited list of all group information:
+    
+      Open Perms:
+      ```
+      Read  -> Any
+      Write -> root
+      ```
+    
+      Read provides a semicolon-delimited list of all group information:
+      
       ```
       <groupname>;<gid>;<username>,<username>,<etc>
       ```
-      Only openable in read mode. Any user on the system has access. Also a part of deeper urls.
+      Write takes a semicolon delimited list of group information, as above, and returns an error if the list is not valid. Also a part of deeper urls:
+        * `gid` - Group ID
+        
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root
+          ```
+          
+          Read or write an unsigned 32-bit integer as the group ID
+        * `users` - List of users in the group
+          
+          Open Perms:
+          ```
+          Read  -> Any
+          Write -> root
+          ```
+          
+          Read or write a comma-delimited list of login-names. Write overrides existing groups!
   * `useradd` - Interface for adding users
+    
+    Open Perms:
+    ```
+    Read  -> None
+    Write -> root
+    ```
+    
     Reads a string like so: 
     ```
     <login-name>;<uid>;<primary-gid>;<comment>;<home-dir>;<login-shell>
     ```
-    Only openable in write mode
   * `groupadd` - Interface for adding groups
+  
+    Open Perms:
+    ```
+    Read  -> None
+    Write -> root
+    ```
+    
     Reads a string like so:
     ```
     <groupname>;<gid>;<username>,<username>,<etc>
     ```
-    Only Openable in write mode
   * `userdel` - Deletes a user
+    
+    Open Perms:
+    ```
+    Read  -> None
+    Write -> root
+    ```
+ 
     Reads the username. Throws error on `root`
-    Only openable in write mode.
   * `groupdel` - Deletes Group
+  
+    Open Perms:
+    ```
+    Read  -> None
+    Write -> root
+    ```
+    
     Reads the groupname. Throws error on `root`
-    Only openable in write mode
   
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -85,3 +203,9 @@ The problem is with access to the underlying files storing the data that the sta
 [unresolved]: #unresolved-questions
 
 The interface itself is pretty mutable at this point, and I'm not sure I've covered all the bases with what functionality it actually needs to have.
+
+Some naming for things (specifically, see `auth:/user/<login-name>/name`, `auth:/user/<login-name>/shell`).
+
+Also, the actual string-based protocol things (where I'm reading and writing delimited lists, etc).
+
+I also wonder if users shouldn't store a list of groups that they are in, rather than groups storing a list of users that are in them.
