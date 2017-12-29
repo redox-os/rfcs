@@ -51,8 +51,8 @@ In this documentation, `login-name` is used as the name of the user that is inpu
           
           Open Perms:
           ```
-          Read  -> root
-          Write -> root
+          Read  -> root or <login-name>
+          Write -> root or <login-name>
           ```
           
           Authorizing a user is comprised of the following steps:
