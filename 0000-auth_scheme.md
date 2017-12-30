@@ -51,8 +51,8 @@ In this documentation, `login-name` is used as the name of the user that is inpu
           
           Open Perms:
           ```
-          Read  -> root or <login-name>
-          Write -> root or <login-name>
+          Read  -> root
+          Write -> root
           ```
           
           Authorizing a user is comprised of the following steps:
@@ -104,6 +104,20 @@ In this documentation, `login-name` is used as the name of the user that is inpu
           ```
           
           Read or Write a valid URL (a string)
+        * `passwd` - Change <login-name>'s password
+          
+          Open Perms:
+          ```
+          Read  -> root or <login-name>
+          Write -> root or <login-name>
+          ```
+          
+          Write three lines of text and recieve a `0` or `1` for success or failure
+          ```
+          current-passwd
+          new-passwd
+          confirm-new
+          ```
   * `group/` - Inteface for Mapping of all groupnames to groupids, like so:
     ```
     root:0
