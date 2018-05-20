@@ -40,14 +40,22 @@ pub struct Event {
 }
 
 // An example file, a network interface
-let fd = open("network:", O_RDWR | O_CLOEXEC | O_NONBLOCK).unwrap();
+let file = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .custom_flags(O_CLOEXEC | O_NONBLOCK)
+    .open("network:").unwrap();
 
 // Create a new event queue. This is tracked by file id
-let mut event_queue = File::open("event:").unwrap();
+let mut event_queue = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .custom_flags(O_CLOEXEC)
+    .open("event:").unwrap();
 
 // Create a request for read events on the file, with a unique token
 let event_request = Event {
-    id: fd,
+    id: file.as_raw_fd(),
     flags: EVENT_READ,
     data: 0x1234
 };
