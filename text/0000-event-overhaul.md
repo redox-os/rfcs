@@ -60,6 +60,8 @@ loop {
     let mut event = Event::default();
     let count = event_queue.read(&mut event).unwrap();
     if count == mem::size_of::<Event>() {
+        // The event should have the id set to the network file, the flags set
+        // to EVENT_READ, and the data set the same as the request
         assert_eq!(event, event_request);
     } else {
         panic!("invalid size of event: {}", count);
