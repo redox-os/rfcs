@@ -1,7 +1,7 @@
 - Feature Name: event-overhaul
 - Start Date: 2018-05-19
-- RFC PR: (leave this empty)
-- Redox Issue: (leave this empty)
+- RFC PR: https://github.com/redox-os/rfcs/pull/10
+- Redox Issue: https://github.com/redox-os/kernel/issues/89
 
 # Summary
 [summary]: #summary
