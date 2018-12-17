@@ -55,7 +55,7 @@ If `MAP_LAZY` is set, the kernel allocates enough physical memory for the mappin
 
 The kernel should keep track of which files have been mapped MAP_SHARED using something like a `HashMap<(usize, usize), SharedMemory>` so future MAP_SHARED calls do actually end up shared.
 
-Ideally, `ipcd` should allow `fmap()` so that programs can create arbitrary purpose shared memory buffers, however this might mean that `ipcd` itself can access these buffers.
+Ideally, `ipcd` should allow `fmap()` so that programs can create arbitrary purpose shared memory buffers, however this would mean that `ipcd` itself can access these buffers.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -72,10 +72,11 @@ Mapping descriptors of `memory:` means at some point the descriptor would have t
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-What happens if you call `mmap()` twice on the same file descriptor?
-
 Should PROT_* and MAP_* be in separate arguments, like in POSIX?
 
 Should MAP_SHARED be omitted, given that it allows simultaneous writes, or should userspace programs be trusted to agree on some kind of locking mechanism when using it?
 
 Should we keep `brk()`?
+
+Are user-specified mapping addresses needed?  
+Semi-relatedly, will one process ever allocate more than its grant/heap capacity - if this is possible, user-specified mapping addresses are an alternative to the current system.
