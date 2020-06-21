@@ -153,4 +153,4 @@ Additionally, while the kernel can obviously assist with notifying processes wit
 The API is for the most part actually quite similar to Linux's API, with the only incompatible difference of not having separating the SQ with its entries (which Linux does). The problem however, is that `io_uring`s can have different producers, unlike Linux which only has the kernel. Thus, there might be motivation for a kernel-managed queue that sends submissions to the respective schemes, and collects completions from different schemes, so that the consumer only needs one `io_uring` instance, like on Linux. If that were implemented, there would be a possibility for source-compatibility with liburing, especially if the entry types are exactly the same as Linux's (`struct io_uring_sqe` and `struct io_uring_cqe`). If the syscalls were to be emulated, this could also result possible complete emulation.
 
 # References
-
+1. [https://kernel.dk/io_uring.pdf](https://kernel.dk/io_uring.pdf) - A reference of the io_uring API present from Linux 5.1 and onwards.
