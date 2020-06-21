@@ -6,7 +6,7 @@
 # Summary
 [summary]: #summary
 
-An low-overhead high-performance asynchronous I/O API, inspired by Linux's `io_uring` (since 5.1). In essence `io_uring` behaves like a regular SPSC channel or queue: the producer pushes entries, which the consumer pops. This interface provides two different rings for each `io_uring` instance, namely the _submission queue_ (SQ) and the _completion queue_ (CQ). The process making the syscall (which from now on is referred to as the _consumer_), sends a _submission queue entry_ (SQE or SE), which the process (or kernel) processing the syscall (referred to as the _producer_) handles. 
+An low-overhead high-performance asynchronous I/O API, inspired by Linux's `io_uring` (since 5.1). In essence `io_uring` behaves like a regular SPSC channel or queue: the producer pushes entries, which the consumer pops. This interface provides two different rings for each `io_uring` instance, namely the _submission queue_ (SQ) and the _completion queue_ (CQ). The process making the syscall (which from now on is referred to as the _consumer_), sends a _submission queue entry_ (SQE or SE), which the process (or kernel) processing the syscall (referred to as the _producer_) handles, and then sends a _completion queue entry_ (CQE or CE). 
 
 # Motivation
 [motivation]: #motivation
@@ -29,6 +29,8 @@ Since Linux handles every syscall within ring 0, no extra communication needs to
 [alternatives]: #alternatives
 
 Even though it may not be strictly necessary aside from increased performance to use SPSC queues, one could instead simply introduce `EVENT_READ_COMPLETE` and `EVENT_WRITE_COMPLETE`, and let the kernel retain the grants of the buffers until events with the aforementioned flags have been sent, to indicate that the buffers are not longer needed by the scheme process.
+
+Additionally, while the kernel can obviously assist with notifying processes with lower overhead, this API could be implemented by using shared memory for communication, and futexes or even regular event queues (although with a higher overhead due to syscalls) for notifying. The major problem with this approach however would be buffer management, since that would require processes to use regular syscalls every time they want to register a buffer. Another feature that would be possible, would be fast communication between the kernel and userspace processes. The current Redox `io_uring` design also allows the kernel to be the producer of the rings, which makes it possible for traditional event queues to be completely replaced. This also applies for other kernel schemes.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
