@@ -143,14 +143,14 @@ Since Linux handles every syscall within ring 0, no extra communication needs to
 # Alternatives
 [alternatives]: #alternatives
 
-Even though it may not be strictly necessary aside from increased performance to use SPSC queues, one could instead simply introduce `EVENT_READ_COMPLETE` and `EVENT_WRITE_COMPLETE`, and let the kernel retain the grants of the buffers until events with the aforementioned flags have been sent, to indicate that the buffers are not longer needed by the scheme process.
+Even though it may not be strictly necessary aside from increased performance to use SPSC queues, one could instead simply introduce `O_COMPLETE_IO` (which is paired with `O_NONBLOCK`), `EVENT_READ_COMPLETE` and `EVENT_WRITE_COMPLETE`, and let the kernel retain the grants of the buffers until events with the aforementioned flags have been sent, to indicate that the buffers are not longer needed by the scheme process.
 
 Additionally, while the kernel can obviously assist with notifying processes with lower overhead, this API could be implemented by using shared memory for communication, and futexes or even regular event queues (although with a higher overhead due to syscalls) for notifying. The major problem with this approach however would be buffer management, since that would require processes to use regular syscalls every time they want to register a buffer. Another feature that would be possible, would be fast communication between the kernel and userspace processes. The current Redox `io_uring` design also allows the kernel to be the producer of the rings, which makes it possible for traditional event queues to be completely replaced. This also applies for other kernel schemes.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-None, as of now.
+The API is for the most part actually quite similar to Linux's API, with the only incompatible difference of not having separating the SQ with its entries (which Linux does). The problem however, is that `io_uring`s can have different producers, unlike Linux which only has the kernel. Thus, there might be motivation for a kernel-managed queue that sends submissions to the respective schemes, and collects completions from different schemes, so that the consumer only needs one `io_uring` instance, like on Linux. If that were implemented, there would be a possibility for source-compatibility with liburing, especially if the entry types are exactly the same as Linux's (`struct io_uring_sqe` and `struct io_uring_cqe`). If the syscalls were to be emulated, this could also result possible complete emulation.
 
 # References
 
