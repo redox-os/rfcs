@@ -1,6 +1,6 @@
 - Feature Name: io_uring
 - Start Date: 2020-06-21
-- RFC PR: (leave this empty)
+- RFC PR: [redox-os/rfcs#15](https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/15)
 - Redox Issue: (leave this empty)
 
 # Summary
