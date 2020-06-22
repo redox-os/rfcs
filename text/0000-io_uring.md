@@ -32,8 +32,9 @@ The current structure of the ring header, simplified, is defined as follows:
 struct CachePadded<T>(pub T);
 
 // Generic type parameter T omitted, for simplicity.
+#[repr(C)]
 pub struct Ring {
-    // used to relocate the ring from the static MMAP offsets,
+    // used to relocate the ring entries from the static MMAP offsets,
     base_rel: usize,
 
     // the number of accessible entries in the ring, must be a power of two.
