@@ -128,7 +128,7 @@ pub const CQ_HEADER_MMAP_OFFSET: usize = 0x8000_0000;
 pub const CQ_ENTRIES_MMAP_OFFSET: usize = 0x8020_0000;
 // "SQES" is intentially omitted, unlike with Linux
 ```
-When all of these are mapped, the `io_uring` instance is ready to be attached to a scheme, which can be either a kernel scheme scheme, or a userspace scheme. The attachment is done using the `SYS_ATTACH_IORING` syscall, which takes the file descriptor of the `io_uring` instance, together with any file descriptor from the target scheme. The scheme itself receives a different syscall as a regular packet, but `SYS_RECV_IORING`, which includes the target internal file number of the file descriptor that belonged to the scheme, plus a temporary kernel-mapped buffer, which contains already-mapped offsets to the four ring memory regions, as well as some flags and such. The target file descriptor is only used by the kernel to figure out which scheme to call, but the scheme is free to use it to associate `io_uring` instances with different users of that scheme. At this stage, normal ring operation occurs.
+When all of these are mapped, the `io_uring` instance is ready to be attached to a scheme, which can be either a kernel scheme scheme, or a userspace scheme. The attachment is done using the `SYS_ATTACH_IORING` syscall, which takes the file descriptor of the `io_uring` instance, together with the name of the target scheme, which must be in the same namespace as the attaching process. The scheme itself receives a different syscall as a regular packet, but `SYS_RECV_IORING`, which includes a temporary kernel-mapped buffer, which contains already-mapped offsets to the four ring memory regions, as well as some flags and such.
 
 TODO: Implement `io_uring` freeing.
 
