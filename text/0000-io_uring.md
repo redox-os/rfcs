@@ -48,10 +48,6 @@ pub struct Ring {
     // various status flags, currently only implemented for shutting down rings.
     status: CachePadded<AtomicUsize>,
 
-    // counts the number of references into the ring
-    // TODO: Shouldn't this only be in the kernel?
-    refcount: CachePadded<AtomicUsize>,
-
     // a counter incremented on every push_back operation
     push_epoch: CachePadded<AtomicUsize>,
 
