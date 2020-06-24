@@ -75,13 +75,14 @@ pub struct SqEntry64 {
     pub _rsvd: [u64; 2],    // reserved for future use and must be zero
 }
 
-/// A 32-bit Completion Queue Entry. Takes up 16 bytes of space.
+/// A 64-bit Completion Queue Entry. Takes up 32 bytes of space.
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CqEntry64 {
     pub user_data: u64,     // the same value as specified in the corresponding submission entry
-    pub status: i32,        // the "return value" of the syscall, optionally the flags field can extend this
-    pub flags: u32,         // miscellaneous flags describing the completion
+    pub status: u64,        // the "return value" of the syscall, optionally the flags field can extend this
+    pub flags: u64,         // miscellaneous flags describing the completion
+    pub extra: u64,         // extra eight bytes of the return value (optional)
 }
 ```
 
