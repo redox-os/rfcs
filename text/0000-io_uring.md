@@ -126,7 +126,7 @@ pub const SQ_HEADER_MMAP_OFFSET: usize = 0x0000_0000;
 pub const SQ_ENTRIES_MMAP_OFFSET: usize = 0x0020_0000;
 pub const CQ_HEADER_MMAP_OFFSET: usize = 0x8000_0000;
 pub const CQ_ENTRIES_MMAP_OFFSET: usize = 0x8020_0000;
-// "SQES" is intentially omitted, unlike with Linux
+// "SQES" is intentionally omitted, unlike with Linux
 ```
 When all of these are mapped, the `io_uring` instance is ready to be attached to a scheme, which can be either a kernel scheme scheme, or a userspace scheme. The attachment is done using the `SYS_ATTACH_IORING` syscall, which takes the file descriptor of the `io_uring` instance, together with the name of the target scheme, which must be in the same namespace as the attaching process. The scheme itself receives a different syscall as a regular packet, but `SYS_RECV_IORING`, which includes a temporary kernel-mapped buffer, which contains already-mapped offsets to the four ring memory regions, as well as some flags and such.
 
