@@ -245,6 +245,10 @@ userspace-to-kernel-mode; it shares the same properties as with the other, but
 the roles are reversed. A scheme may at any time receive a request to attach an
 `io_uring` where the kernel is the producer, and this will happen at most once.
 
+The kernel is free to use this `io_uring` whenever it wants asynchronous I/O on
+a scheme that supports it, for example if a userspace-to-kernel `io_uring`
+wrote to a file descriptor owned by that scheme.
+
 One noteworthy difference between userspace-to-userspace plus
 kernel-to-userspace, and userspace-to-kernel, is that the file descriptor
 numbers are local to the target scheme in the userspace-to-userspace case.
