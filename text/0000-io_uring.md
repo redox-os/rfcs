@@ -226,6 +226,15 @@ some intelligent kernel scheduling, the kernel could place an audio driver and
 an audio application on two different CPUs, and they would be to process each
 other's syscalls without any context switch (apart from scheduling of course).
 
+When waiting for notification, the primary way here is to either use futexes
+(as two global epoch counters are incremented on every push and pop,
+respectively), or to use an event queue (which is a userspace-to-kernel
+`io_uring`. where the kernel polls the rings during scheduling to determine
+which processes two wake up.
+
+TODO: Shall the kernel be directly involved, and would using page table flags
+be better than futexes?
+
 ### Userspace-to-kernel
 The userspace-to-kernel attachment mode is similar; the process still calls
 `SYS_ATTACH_IORING`, with the exception of the kernel handling the request. The
@@ -238,6 +247,17 @@ consumer side. The kernel will delegate the syscalls pushed onto that
 also manage the buffers automatically here, as it has full access to them when
 processing syscall, which results in less overhead when not use preregistered
 buffers or other shared memory.
+
+When using an `io_uring` this way, a process pushes submission entries, and
+then calls `SYS_IORING_ENTER`, which is a regular syscall. The kernel then
+reads and processes the submission entries, and pushes completion entries in
+case some requests were already finished or not asynchronous (while `io_uring`
+is perfectly suited to async by design, it can also be used to batch regular
+syscalls within one syscall).
+
+TODO: Are schemes that handle the file descriptors referenced when talking to
+the kernel, going to be directly scheduled in or after `SYS_IORING_ENTER`, or
+is the kernel going to wait for it to be scheduled regularly first?
 
 ### Kernel-to-userspace
 The kernel-to-userspace mode is the producer counterpart of the
@@ -261,6 +281,10 @@ the `io_uring` interface is that in the userspace-to-userspace case, the
 consumer must distinguish between file descriptors local to a specific scheme,
 the its own global file descriptors.
 
+Since the kernel initiates these by itself, and keeps track of state, no
+dedicated syscall resembling `SYS_IORING_ENTER` needs to be called, since the
+kernel can simply check whether the epochs have been incremented or not.
+
 ### Deallocation
 The four `io_uring` memory regions are kernel managed, and thus they only
 require a close syscall on the consumer side, or `funmap` on the producer side.
@@ -274,17 +298,29 @@ instance.
 Since Linux handles every syscall within ring 0, no extra communication needs
 to happen when dealing with addresses; the kernel can simply map a userspace
 address (if it is not already mapped), do its work, and then push a completion
-entry. Since the Redox `io_uring` functions between user processes through
-schemes, all buffers will have to be registered in order for the producer
+entry. Redox has a similar mode: userspace-to-kernel. One downside with this
+compared to how Linux works, is that the kernel has to use two rings: one
+between the consumer and kernel, and one between the kernel and consumer. There
+is also a direct mode, userspace-to-userspace, although it suffers from various
+limitations.
+
+Since the Redox `io_uring` in userspace-to-userspace mode has no direct kernel
+involvement, all buffers will have to be registered in order for the producer
 process to access those buffers. The current workaround here is to use a
 different `io_uring` with the kernel as the producer and allocating buffers
-there. Although this might not impose that of a greater overhead than simply
-letting the kernel deal with this during a syscall, for the most part it
-completely eliminates the ability to use the stack for buffers, since that
-would be a major issue, both for program security and safety.
+there, or to simply mmap them at a somewhat higher cost using regular syscalls.
+Although this might not impose that of a greater overhead than simply letting
+the kernel deal with this during a syscall, for the most part it completely
+eliminates the ability to use the stack for buffers, since that would be a
+major issue, both for program security and safety.
 
 An additional drawback is the increased complexity of both using asynchronous
-I/O and regular blocking I/O in the kernel.
+I/O and regular blocking I/O in the kernel. The kernel may also have to keep
+track of the state of certain operations, instead of bouncing between userspace
+and kernel in a stack-like way, when schemes call schemes. Futures (and maybe
+async/await) might help with this: Alternatively, one could limit more complex
+syscalls, e.g. `SYS_OPEN` from having to be repeated by only allowing simple
+paths without symlinks, which reduces complex state.
 
 # Alternatives
 [alternatives]: #alternatives
