@@ -77,47 +77,33 @@ Making full use of URL authorities would also allow for implementing a hypotheti
 # Detailed design
 [design]: #detailed-design
 
+
+
 <!-- This is the bulk of the RFC. Explain the design in enough detail for somebody familiar with the language to understand, and for somebody familiar with the compiler to implement. This should get into specifics and corner-cases, and include examples of how the feature is used. -->
 
-
-
-
-<!-- 
-In practice, the current working directory in Redox is almost always under the `file:` scheme. Thus, `/` on Redox should refer to the primary partition, and `//` should refer to the `file:` scheme itself.
-
-
-
-This RFC proposes requiring that the current working directory implement the `file:` protocol (read, write, seek, mkdir, etc). In other words, because of the way URL schemes work, the cwd scheme must be `file:`. This would guarentee that `//` always refers to `file:`.
-
-Our problem was that Linux software, expecting paths to resources implementing the file protocol, cannot handle paths not starting with a slash. This change would allow all file-implementing resources to be referred to using a slash prefix. For consistency, it's recommended that `file:` specifically is discouraged in favor of `//`.
-
-
-
-It's proposed that there be a (modular) process for registering handlers under schemes.
-
-For example, there could be authorities under `file:` for each disk partition. Or, `ftp:` schemes (which by themselves would implement the socket-like `ftp:` protocol) could "mount" themselves as authorities under `file:`.
-
-Note that `http:` could provide an authority under `file:` for reading web pages using the shell without needing to strip headers or craft `GET` requests. The `http:` scheme would be used to reference a socket for the actual http protocol.
-
-
-Note the environment variables in that shell invocation. It could helpful to have the shell or kernel define the environment variables `$CURRENT_HOST`, `$CURRENT_USERINFO`, and `$CURRENT_AUTHORITY`.
-
-Authorities would be useful for many schemes, not just `file:`. For example, sqlite could register itself as an authority under a hypothetical backend-agnostic `sql:` scheme. This authority pointer could then be changed, if needed, to a remote database.
-
-This separates protocols from implementations. A service could expose itself as accessible through multiple interfaces, such as `file:`, `sql:`, or even a localhost REST API under `http:`. -->
+*TODO: researched how authority allocation and naming would be implemented*
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 <!-- Why should we *not* do this? -->
 
+Redox software currently expects schemes such as `env:` and `sys:` to exist. This RFC would break that software (although the author would be happy to donate time to fix these things).
+
 # Alternatives
 [alternatives]: #alternatives
 
-What other designs have been considered? What is the impact of not doing this?
+<!-- What other designs have been considered? What is the impact of not doing this? -->
+
+It's been proposed that schemes are moved under `/`, so they can be referenced with the prefix `/:`. This would dirty the concept of `/` being a clean copy of the default paritition while causing Redox to stray away from the syntax of traditional URLs.
+
+It's also been proposed that a compatibility layer be written implementing FHS on `/` for Unix software. This would not fix the issue of Redox URLs not self-documenting their protocol.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-What parts of the design are still TBD?
+<!-- What parts of the design are still TBD? -->
+
+How authority allocation and naming would be implemented should be discussed.
+
 
