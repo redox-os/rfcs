@@ -35,6 +35,10 @@ These relative paths, along with the optional authority section, apply to the `f
 > * A non-local file with an explicit authority.  For example:
 >   * `file://host.example.com/path/to/file`
 
+Using `//` to reference an authority section in paths is permitted by POSIX, supported by Bash, and used on Cygwin [\[1\]][so-one] [\[2\]][so-two]
+
+[so-one]: https://stackoverflow.com/questions/20690828/what-does-double-slash-in-cd-mean-in-linux
+[so-two]: https://unix.stackexchange.com/questions/12283/unix-difference-between-path-starting-with-and
 
 # Summary
 [summary]: #summary
@@ -89,6 +93,8 @@ Making full use of URL authorities would also allow for implementing a hypotheti
 <!-- Why should we *not* do this? -->
 
 Redox software currently expects schemes such as `env:` and `sys:` to exist. This RFC would break that software (although the author would be happy to donate time to fix these things).
+
+Another problem is having `//` different from `/`. Some software may calculate paths as `$PREFIX/lib`. If `$PREFIX` is `/`, the path would be `//lib`, which is problematic. Fortunately, though, this is easy to detect and fix if source code is available.
 
 # Alternatives
 [alternatives]: #alternatives
