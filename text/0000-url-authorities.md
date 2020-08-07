@@ -35,7 +35,7 @@ These relative paths, along with the optional authority section, apply to the `f
 > * A non-local file with an explicit authority.  For example:
 >   * `file://host.example.com/path/to/file`
 
-Using `//` in file paths to reference remote servers is [permitted by POSIX](https://pubs.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap04.html#tag_04_11), [supported by Bash](https://stackoverflow.com/questions/20690828/what-does-double-slash-in-cd-mean-in-linux), [used on Cygwin](https://unix.stackexchange.com/a/12291), and [used on Windows](https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN).
+Using double slashes in file paths to reference remote servers is [permitted by POSIX](https://pubs.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap04.html#tag_04_11), [supported by Bash](https://stackoverflow.com/questions/20690828/what-does-double-slash-in-cd-mean-in-linux), [used on Cygwin](https://unix.stackexchange.com/a/12291), and [used on Windows](https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN).
 
 # Summary
 [summary]: #summary
