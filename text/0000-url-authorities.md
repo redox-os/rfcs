@@ -87,10 +87,6 @@ Another problem is having `//` different from `/`. Some software may calculate p
 
 <!-- What other designs have been considered? What is the impact of not doing this? -->
 
-It's been proposed that schemes are moved under `/`, so they can be referenced with the prefix `/:`. This would dirty the concept of `/` being a clean copy of the default paritition while causing Redox to stray away from the syntax of traditional URLs.
-
-It's also been proposed that a compatibility layer be written implementing FHS on `/` for Unix software. This would not fix the issue of Redox URLs not self-documenting their protocol.
-
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
