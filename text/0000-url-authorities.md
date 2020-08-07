@@ -35,7 +35,7 @@ These relative paths, along with the optional authority section, apply to the `f
 > * A non-local file with an explicit authority.  For example:
 >   * `file://host.example.com/path/to/file`
 
-Using `//` to reference an authority section in paths is permitted by POSIX, supported by Bash, and used on Cygwin [\[1\]][so-one] [\[2\]][so-two]
+Using `//` to reference an authority section in paths is permitted by POSIX, supported by Bash, and used on Cygwin [\[1\]][so-one] [\[2\]][so-two]. Double slashes (`\\`) are also [used on Windows](https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN) for referencing remote servers.
 
 [so-one]: https://stackoverflow.com/questions/20690828/what-does-double-slash-in-cd-mean-in-linux
 [so-two]: https://unix.stackexchange.com/questions/12283/unix-difference-between-path-starting-with-and
