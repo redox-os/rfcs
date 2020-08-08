@@ -57,21 +57,19 @@ Per IEFT, URL schemes should be *protocols*, such as [stfp, ssh, git, or http](h
 
 Enforcing that schemes must represent protocols (as opposed to resources) would ensure that Redox URLs are similar to the types of URLs seen in web browsers. This change would mean that URLs self-document the method through which they can be interacted with. For example, a hypothetical `http:` scheme would be expected to implement the HTTP protocol rather than being some wrapper that expects web pages to be accessed as files.
 
-Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`.
+Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`. 
 
 Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another. It's proposed that a user can `chroot file://http`, in this example, to allow `file://example.com` to map to `file://example.com.http`.
 
-This use of domains as namespaces is very user-friendly. A user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. A user then could `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the pespective of a Redox-running Raspberry Pi on the LAN.
+Domains could be a potential alternative to namespaces, although that is outside the scope of this RFC. Theoretically, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. They then could `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
 
 
 # Detailed design
 [design]: #detailed-design
 
-
-
 <!-- This is the bulk of the RFC. Explain the design in enough detail for somebody familiar with the language to understand, and for somebody familiar with the compiler to implement. This should get into specifics and corner-cases, and include examples of how the feature is used. -->
 
-*TODO: researched how authority allocation and naming would be implemented*
+URL authorities would be allocated just like how schemes are currently allocated. This section needs to be expanded.
 
 # Drawbacks
 [drawbacks]: #drawbacks
