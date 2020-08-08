@@ -57,7 +57,7 @@ Per IEFT, URL schemes should be *protocols*, such as [stfp, ssh, git, or http](h
 
 Enforcing that schemes must represent protocols (as opposed to resources) would ensure that Redox URLs are similar to the types of URLs seen in web browsers. This change would mean that URLs self-document the method through which they can be interacted with. For example, a hypothetical `http:` scheme would be expected to implement the HTTP protocol rather than being some wrapper that expects web pages to be accessed as files.
 
-Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol, and it allows one daemon to be accessed through multiple protocols. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`. This daemons may be accessible though multiple protocols, perhaps as a database at `sql://sys` or a REST API at `http://sys`.
+Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`.
 
 Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another. It's proposed that a user can `chroot file://http`, in this example, to allow `file://example.com` to map to `file://example.com.http`.
 
