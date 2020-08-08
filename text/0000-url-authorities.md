@@ -67,6 +67,8 @@ Domains could be a potential alternative to namespaces, although that is outside
 
 Inititally, this RFC could be implemented without changing the Redox kernel. Scheme handlers could be written that would allow allocating domains. Existing schemes such as `env:` and `sys:` may be preserved for compatibility reasons.
 
+This section needs to be expanded.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
