@@ -65,16 +65,14 @@ Domains could be a potential alternative to namespaces, although that is outside
 
 <!-- This is the bulk of the RFC. Explain the design in enough detail for somebody familiar with the language to understand, and for somebody familiar with the compiler to implement. This should get into specifics and corner-cases, and include examples of how the feature is used. -->
 
-URL authorities would be allocated just like how schemes are currently allocated. This section needs to be expanded.
+Inititally, this RFC could be implemented without changing the Redox kernel. Scheme handlers could be written that would allow allocating domains. Existing schemes such as `env:` and `sys:` may be preserved for compatibility reasons.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 <!-- Why should we *not* do this? -->
 
-Redox software currently expects schemes such as `env:` and `sys:` to exist. This RFC would break that software (although the author would be happy to donate time to fix these things).
-
-URL standards dictate that `//` would typically point to `file://` on Redox. We could disable this.
+URL standards dictate that `//` would typically point to `file://` on Redox. We could easily disable this functionality.
 
 # Alternatives
 [alternatives]: #alternatives
