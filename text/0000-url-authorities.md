@@ -80,8 +80,6 @@ This use of domains as namespaces is very user-friendly. A user could implement,
 
 Redox software currently expects schemes such as `env:` and `sys:` to exist. This RFC would break that software (although the author would be happy to donate time to fix these things).
 
-Another problem is having `//` different from `/`. Some software may calculate paths as `$PREFIX/lib`. If `$PREFIX` is `/`, the path would be `//lib`, which is problematic. Fortunately, though, this is easy to detect and fix if source code is available.
-
 # Alternatives
 [alternatives]: #alternatives
 
