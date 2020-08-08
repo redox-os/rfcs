@@ -80,6 +80,8 @@ This use of domains as namespaces is very user-friendly. A user could implement,
 
 Redox software currently expects schemes such as `env:` and `sys:` to exist. This RFC would break that software (although the author would be happy to donate time to fix these things).
 
+URL standards dictate that `//` would typically point to `file://` on Redox. We could disable this.
+
 # Alternatives
 [alternatives]: #alternatives
 
