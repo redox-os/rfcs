@@ -17,9 +17,7 @@ scheme : ┬──────────────────────�
               (    the  `authority`    )
 ```
 
-We have relative URLs, too. For example, on the web page [http://example.com/foo](.), the relative URL [/](/) refers to [http://example.com](//) (the scheme and authority), and the relative URL [//](//) refers to [http:](//) (the scheme).
-
-Yhe optional authority section applies to the `file:` scheme, too. See [Wikipedia § File URI Scheme](https://en.wikipedia.org/wiki/File_URI_scheme#How_many_slashes?) and [RFC 8089 § Appendix B](https://tools.ietf.org/html/rfc8089#appendix-B):
+The optional authority section applies to the `file:` scheme, too. See [Wikipedia § File URI Scheme](https://en.wikipedia.org/wiki/File_URI_scheme#How_many_slashes?) and [RFC 8089 § Appendix B](https://tools.ietf.org/html/rfc8089#appendix-B):
 
 > __Appendix B.&nbsp;&nbsp;&nbsp;Example URIs__
 >
@@ -34,8 +32,6 @@ Yhe optional authority section applies to the `file:` scheme, too. See [Wikipedi
 > _Non-local files:_
 > * A non-local file with an explicit authority.  For example:
 >   * `file://host.example.com/path/to/file`
-
-Double slashes in paths to reference remote servers is [permitted by POSIX](https://pubs.opengroup.org/onlinepubs/009695399/basedefs/xbd_chap04.html#tag_04_11), [supported by Bash](https://stackoverflow.com/questions/20690828/what-does-double-slash-in-cd-mean-in-linux), [used on Cygwin](https://unix.stackexchange.com/a/12291), and [user on Windows](https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN).
 
 # Summary
 [summary]: #summary
