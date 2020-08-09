@@ -55,7 +55,7 @@ Enforcing that schemes must represent protocols (as opposed to resources) would 
 
 Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`. 
 
-Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another. It's proposed that a user can `chroot file://http`, in this example, to allow `file://example.com` to map to `file://example.com.http`.
+Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another.
 
 Domains could be a potential alternative to namespaces, although that is outside the scope of this RFC. Theoretically, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. They then could `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
 
