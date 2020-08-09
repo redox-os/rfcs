@@ -38,7 +38,9 @@ The optional authority section applies to the `file:` scheme, too. See [Wikipedi
 
 <!-- One para explanation of the feature. -->
 
-This RFC proposes standardizing Redox URLs based on IEFT RFCs, learning from the lessons of the internet. Schemes would represent *protocols* (instead of *resources*) so that URLs self-document how they can be interacted with. File-protocol resources such as `env:` would be moved under `file:` as *authorities.* For example, `env:PATH` could be moved to `file://env/PATH`, which conforms to the `file:` scheme specification ([RFC 8089](https://tools.ietf.org/html/rfc8089#appendix-B)). A DNS-like system is proposed to handle allocation under the authority section along. Domains could also be used to re-implememt namespacing.
+This RFC proposes 
+
+This RFC proposes standardizing Redox URLs based on IEFT RFCs. Schemes would represent protocols (instead of resources), so URLs would self-document how they can be interacted with. Daemons would be identified under the authority section of a URL. Multiple daemons would be able to host under the same scheme/protocol. They would be identified using the authority section of a URL. File-protocol resources such as `env:` would be available under `file:`. For example, `env:PATH` could be accessed to `file://env/PATH`, which conforms to the `file:` scheme specification ([RFC 8089](https://tools.ietf.org/html/rfc8089#appendix-B)). 
 
 # Motivation
 [motivation]: #motivation
@@ -57,7 +59,7 @@ Moving daemons into the authority section of URLs allows multiple daemons to be 
 
 Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another.
 
-Domains could be a potential alternative to namespaces, although that is outside the scope of this RFC. Theoretically, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. They then could `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
+Domains could be a potential alternative to namespaces, although that's outside the scope of this RFC. Theoretically, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. They would then `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
 
 
 # Detailed design
