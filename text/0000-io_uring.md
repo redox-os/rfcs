@@ -42,7 +42,7 @@ polled by the driver), on other hardware such as NVME disks, the hardware will
 not read from the disk by itself, but has to be started by the driver. The way
 `xhcid` handles this is by having two files allocated for each hardware
 endpoint: `ctl` and `data`. Not only is it much more complex and complicated
-both on for the driver and the driver user, but it also requires two separate
+both for the driver and the driver user, but it also requires two separate
 syscalls, and thus causes more context switches than it needs to.
 
 # Detailed design
@@ -197,9 +197,9 @@ The Redox `io_uring` implementation comes with a new scheme, `io_uring:`. The
 scheme provides only a top-level file, like `debug:`, which when opened creates
 a new `io_uring` instance in its _Initial_ state. By then writing the create
 info (`IoUringCreateInfo`) to that file descriptor, the `io_uring` instance
-transistions into the `Created` state with basic information such as the type
+transistions into the _Created_ state with basic information such as the type
 of submission and completion entries, and the number of entries. In that state,
-the four memory region can then be mmapped, which are located at the following
+the four memory regions can then be mmapped, which are located at the following
 offsets:
 
 ```rust
@@ -217,6 +217,9 @@ in one of the following ways:
 * userspace to userspace
 * userspace to kernel
 * kernel to userspace
+
+After a successful attachment, the instance will transition into the _Attached
+state_, where it is capable of submitting commands.
 
 ### Userspace-to-userspace
 In the userspace-to-userspace scenario, which has the benefit of zero kernel
