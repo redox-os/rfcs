@@ -111,25 +111,39 @@ for these entry types are the following (possibly simplified):
 // 64 bytes long
 #[repr(C, align(64))]
 pub struct SqEntry64 {
-    pub opcode: u8,         // the operation code negotiated between the producer and consumer
-    pub flags: u8,          // flags specific to entries and how they behave
-    pub priority: u16,      // the priority; greater means higher priority
-    pub syscall_flags: u32, // the flags specific to the syscall
-    pub fd: u64,            // the file descriptor to operate on, for most syscalls
-    pub len: u64,           // the length, for most syscalls
-    pub user_data: u64,     // an arbitrary number or pointer passed to the completion entry
-    pub addr: u64,          // for syscalls taking an address, this will point to that address
-    pub offset: u64,        // for syscalls taking an offset, this specifies that that offset
-    pub _rsvd: [u64; 2],    // reserved for future use and must be zero
+    // the operation code negotiated between the producer and consumer
+    pub opcode: u8,
+    // flags specific to entries and how they behave
+    pub flags: u8,
+    // the priority; greater means higher priority
+    pub priority: u16,
+    // the flags specific to the syscall
+    pub syscall_flags: u32,
+    // the file descriptor to operate on, for most syscalls
+    pub fd: u64,
+    // the length, for most syscalls
+    pub len: u64,
+    // an arbitrary number or pointer passed to the completion entry
+    pub user_data: u64,
+    // for syscalls taking an address, this will point to that address
+    pub addr: u64,
+    // for syscalls taking an offset, this specifies that that offset
+    pub offset: u64,
+    // reserved for future use and must be zero
+    pub _rsvd: [u64; 2],
 }
 
 // 32 bytes long
 #[repr(C, align(32))]
 pub struct CqEntry64 {
-    pub user_data: u64,     // the same value as specified in the corresponding submission entry
-    pub status: u64,        // the "return value" of the syscall, optionally the flags field can extend this
-    pub flags: u64,         // miscellaneous flags describing the completion
-    pub extra: u64,         // extra eight bytes of the return value (optional)
+    // the same value as specified in the corresponding submission entry
+    pub user_data: u64,
+    // the "return value" of the syscall, optionally the flags field can extend this
+    pub status: u64,
+    // miscellaneous flags describing the completion
+    pub flags: u64,
+    // extra eight bytes of the return value (optional)
+    pub extra: u64,
 }
 ```
 
