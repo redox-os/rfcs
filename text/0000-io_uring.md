@@ -151,7 +151,6 @@ pub struct SqEntry32 {
 
 // 16 bytes long
 #[repr(C, align(16))]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CqEntry32 {
     pub user_data: u32,
     pub status: u32,
