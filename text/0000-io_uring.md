@@ -199,9 +199,9 @@ raw value, modulo twice the number of entries.
 
 In other words,
 
-$$
+```math
 i \equiv r \pmod{2n}
-$$
+```
 
 where $i$ is the index into the array, $r$ the raw atomic variable, and $n$ the
 number of entries in the ring.
@@ -217,15 +217,15 @@ respectively.
 
 Therefore,
 
-$$
+```math
 c_{head} = \lfloor \frac{r_{head}}{n} \rfloor
-$$
-$$
+```
+```math
 c_{tail} = \lfloor \frac{r_{tail}}{n} \rfloor
-$$
-$$
+```
+```math
 c = c_{head} \oplus c_{tail}
-$$
+```
 
 where $c$ denotes the cycle flag, and $\oplus$ denotes XOR.
 
