@@ -203,8 +203,8 @@ In other words,
 i \equiv r \pmod{2n}
 ```
 
-where $i$ is the index into the array, $r$ the raw atomic variable, and $n$ the
-number of entries in the ring.
+where $`i`$ is the index into the array, $`r`$ the raw atomic variable, and
+$`n`$ the number of entries in the ring.
 
 Additionally, the ring buffer has a _cycle_ condition, which occurs somewhat
 frequently when the indices overflow the number of entries. The _push cycle_
@@ -227,7 +227,7 @@ c_{tail} = \lfloor \frac{r_{tail}}{n} \rfloor
 c = c_{head} \oplus c_{tail}
 ```
 
-where $c$ denotes the cycle flag, and $\oplus$ denotes XOR.
+where $`c`$ denotes the cycle flag, and $`\oplus`$ denotes Exclusive OR.
 
 There is also a push epoch, and a pop epoch, which are global counters for each
 ring that are incremented on each respective operation. This is mainly used by
