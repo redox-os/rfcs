@@ -6,15 +6,16 @@
 # Summary
 [summary]: #summary
 
-A low-overhead high-performance asynchronous I/O API, inspired by Linux's
-`io_uring` (since 5.1). In essence `io_uring` behaves like a regular SPSC
-channel or queue: the producer pushes entries, which the consumer pops. This
-interface provides two different rings for each `io_uring` instance, namely the
-_submission queue_ (SQ) and the _completion queue_ (CQ). The process making the
-syscall (which from now on is referred to as the _consumer_), sends a
-_submission queue entry_ (SQE or SE), which the process (or kernel) processing
-the syscall (referred to as the _producer_) handles, and then sends a
-_completion queue entry_ (CQE or CE). 
+`io_uring` is a low-latency high-throughput asynchronous I/O API, inspired by
+Linux's `io_uring` (since 5.1). In essence `io_uring` behaves like a regular
+SPSC channel or queue: the producer pushes entries, which the consumer pops.
+This interface provides two different rings for each `io_uring` instance,
+namely the _submission queue_ (SQ) and the _completion queue_ (CQ). The process
+making the syscall (which from now on is referred to as the _consumer_), sends
+a _submission queue entry_ (SQE or SE), which the process (or kernel)
+processing the syscall (referred to as the _producer_) handles, and then sends
+a _completion queue entry_ (CQE or CE). The Redox implementation also allows
+different roles for processes and the kernel, unlike with Linux.
 
 # Motivation
 [motivation]: #motivation
@@ -26,14 +27,15 @@ Meltdown vulnerability; this is also the motivation behind Linux's io_uring
 API, even if Redox would benefit to a greater extent.
 
 By using two separate queues, the _submission queue_, and the _completion
-queue_, the only overhead whatsoever of the syscall, is to increment two atomic
+queue_, the only overhead whatsoever of the syscall, is to write the submission
+queue entry to a flat shared memory region, and then increment two atomic
 variables (where the second is optional and only for process notification,
-albeit highly recommended), and write the submission queue entry to a flat
-shared memory region. Similarly, when a command completes, all that has to be
-done is the same: incrementing two counters and reading from shared memory.
-Since the channels are lock-free unless the queues are empty (when receiving)
-or full (when sending), this also allows two processes that run in parallel to
-serve each other's requests simultaneously in real-time by polling the rings.
+albeit highly recommended), in that order. Similarly, when a command completes,
+all that has to be done is the same: reading from shared memory, and then
+incrementing two counters. Since the channels are lock-free unless the queues
+are empty (when receiving) or full (when sending), this also allows two
+processes that run in parallel to serve each other's requests simultaneously in
+real-time by polling the rings.
 
 Another reason why `io_uring` is to be considered, is due to the
 completion-based model for async I/O. While the readiness-based model works
@@ -53,16 +55,17 @@ syscalls, and thus causes more context switches than it needs to.
 On the technical side, each `io_uring` instance comprises two rings - the
 submission ring and the completion ring. These rings reside in shared memory,
 which is either shared by the kernel and a process, or two processes. Every
-individual reference to a ring uses two memory regions (or regular memory
-mappings in kernel space). The first region is exactly one page large (4 KiB on
-x86_64, however so long as the ring header fits within a page, architectures
-with smaller page sizes would also be able to use those), and contains the ring
-header, which is used for atomically accessed counters such as indices and
-epochs. Meanwhile, the second region contains the ring entries, which must for
-performance purposes be aligned to a multiple of its own size. Hence, with two
-rings for command submission and command completion, and two regions per ring,
-this results in two fixed-size regions and two variably-sized regions
-(dependent on the number of submission and completion entries, respectively).
+individual reference to a ring uses two memory regions (typically regular
+memory mappings managed by the kernel). The first region is exactly one page
+large (4 KiB on x86_64, however so long as the ring header fits within a page,
+architectures with smaller page sizes would also be able to use those), and
+contains the ring header, which is used for atomically accessed counters such
+as indices and epochs. Meanwhile, the second region contains the ring entries,
+which must for performance purposes be aligned to a multiple of its own size.
+Hence, with two rings for command submission and command completion, and two
+regions per ring, this results in two fixed-size regions and two variably-sized
+regions (dependent on the number of submission and completion entries,
+respectively).
 
 ### Ring data structures
 
@@ -80,10 +83,10 @@ pub struct Ring {
     // the number of accessible entries in the ring, must be a power of two.
     entry_count: usize,
 
-    // the index of the head of the ring, on which entries are popped.
+    // the index of the head of the ring, from which entries are popped.
     head_index: CachePadded<AtomicUsize>,
 
-    // the index of the tail of the ring, on which new entries are popped.
+    // the index of the tail of the ring, to which new entries are pushed.
     tail_index: CachePadded<AtomicUsize>,
 
     // various status flags, currently only implemented for shutting down rings.
@@ -177,20 +180,64 @@ pub struct CqEntry32 {
 Every ring has two major operations:
 
 * `push_back`, which tries to push new entry onto the ring, or fails if the
-  ring empty full, or shut down
+  ring was full, or shut down
 * `pop_front`, which tries pop pop an entry from the ring, or fails if the ring
   was empty, or shut down
 
-Implementation-wise, these rings simply increment the head or tail index, based
-on whether the operation is a push or pull operation. Since the queue is
-strictly SPSC, the producer can assume that it is safe to write the value and
-then increment the tail index, so that the consumer is aware of the write, only
-after it has been done. Popping works the same way, with the only difference
-being that the head index is written to and the tail index is read.
+Implementation-wise, these rings simply read or write entries, and then
+increment the head or tail index, based on whether the operation is a push or
+pull operation. Since the queue is strictly SPSC, the producer can assume that
+it is safe to write the value and then increment the tail index, so that the
+consumer is aware of the write, only after it has been done. Popping works the
+same way, with the only difference being that the head index is written to and
+the tail index is read.
+
+The indices, represent regular array indices; the byte offset of the entry is
+simply calculated by multiplying the size of the entry, with the index.
+However, they must be decoded from the raw value in the atomics, by taking the
+raw value, modulo twice the number of entries.
+
+In other words,
+
+$$
+i \equiv r \pmod{2n}
+$$
+
+where $i$ is the index into the array, $r$ the raw atomic variable, and $n$ the
+number of entries in the ring.
+
+Additionally, the ring buffer has a _cycle_ condition, which occurs somewhat
+frequently when the indices overflow the number of entries. The _push cycle_
+and _pop cycle_ flags are either 0 or 1, and are calculated by rounding down
+the quotient of the index with the number of entries, to the nearest integer.
+Based on the Exclusive OR (XOR) of these two flags, the _cycle_ will flip the
+roles of the head and tail index when comparing them, which happens before
+every push and pop operation, to check whether the ring is full or empty,
+respectively.
+
+Therefore,
+
+$$
+c_{head} = \lfloor \frac{r_{head}}{n} \rfloor
+$$
+$$
+c_{tail} = \lfloor \frac{r_{tail}}{n} \rfloor
+$$
+$$
+c = c_{head} \oplus c_{tail}
+$$
+
+where $c$ denotes the cycle flag, and $\oplus$ denotes XOR.
 
 There is also a push epoch, and a pop epoch, which are global counters for each
-ring that are incremented on each respective operation. This makes it simple
-for the kernel to quickly check `io_uring` during scheduling, if needed.
+ring that are incremented on each respective operation. This is mainly used by
+the kernel to notify a user when a ring can be pushed to (after it was
+previously full), or when it can be popped from (after it was previously
+empty). It also makes it simple for the kernel to quickly check those during
+scheduling, if needed. The reason why these are represented as epochs, is to
+allow the ring to truncate indices arbitrarily using modulo or bitwise AND, but
+also to allow a process to notify itself from another thread, without pushing
+any additional entry, which would not be possible for a full ring.
 
 ## Interface layer
 The Redox `io_uring` implementation comes with a new scheme, `io_uring:`. The
@@ -218,8 +265,8 @@ in one of the following ways:
 * userspace to kernel
 * kernel to userspace
 
-After a successful attachment, the instance will transition into the _Attached
-state_, where it is capable of submitting commands.
+After a successful attachment, the instance will transition into the _Attached_
+state, where it is capable of submitting commands.
 
 ### Userspace-to-userspace
 In the userspace-to-userspace scenario, which has the benefit of zero kernel
@@ -372,8 +419,8 @@ paths without symlinks, which reduces complex state.
 
 Even though it may not be strictly necessary aside from increased performance
 to use SPSC queues, one could instead simply introduce `O_COMPLETION_IO` (which
-would be paired with `O_NONBLOCK`), `EVENT_READ_COMPLETE` and
-`EVENT_WRITE_COMPLETE`, and let the kernel retain the grants of the buffers
+would be paired with `O_NONBLOCK`), `EVENT_READ_COMPLETION` and
+`EVENT_WRITE_COMPLETION`, and let the kernel retain the grants of the buffers
 until events with the aforementioned flags have been sent, to indicate that the
 buffers are not longer needed by the scheme process.
 
