@@ -218,10 +218,10 @@ respectively.
 Therefore,
 
 ```math
-c_{head} = \lfloor \frac{r_{head}}{n} \rfloor
+c_{head} \equiv \lfloor \frac{r_{head}}{n} \rfloor \pmod{2}
 ```
 ```math
-c_{tail} = \lfloor \frac{r_{tail}}{n} \rfloor
+c_{tail} \equiv \lfloor \frac{r_{tail}}{n} \rfloor \pmod{2}
 ```
 ```math
 c = c_{head} \oplus c_{tail}
