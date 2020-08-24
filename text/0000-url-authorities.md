@@ -38,38 +38,33 @@ The optional authority section applies to the `file:` scheme, too. See [Wikipedi
 
 <!-- One para explanation of the feature. -->
 
-This RFC proposes 
-
-This RFC proposes standardizing Redox URLs based on IEFT RFCs. Schemes would represent protocols (instead of resources), so URLs would self-document how they can be interacted with. Daemons would be identified under the authority section of a URL. Multiple daemons would be able to host under the same scheme/protocol. They would be identified using the authority section of a URL. File-protocol resources such as `env:` would be available under `file:`. For example, `env:PATH` could be accessed to `file://env/PATH`, which conforms to the `file:` scheme specification ([RFC 8089](https://tools.ietf.org/html/rfc8089#appendix-B)). 
+This RFC proposes standardizing Redox URLs based on IEFT RFCs. Schemes would represent protocols (instead of resources), so URLs would self-document how they can be interacted with. Daemons would be identified under the authority section of a URL. Multiple daemons would be able to host under the same scheme/protocol. They would be identified using the authority section of a URL. 
 
 # Motivation
 [motivation]: #motivation
 
 <!-- Why are we doing this? What use cases does it support? What is the expected outcome? -->
 
-Per IEFT, URL schemes should be *protocols*, such as [stfp, ssh, git, or http](https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml). This is opposed to URN schemes, such as [isbn, issn, or ieft](https://tools.ietf.org/html/rfc8141#section-1), that identify *resources* without specifying the protocol through which those resources are retrieved. [\[1\]][1] [\[2\]][2] [\[3\]][3]
+Per IEFT, URL schemes should be protocols, such as [stfp, ssh, git, or http](https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml). This is opposed to URN schemes, such as [isbn, issn, or ieft](https://tools.ietf.org/html/rfc8141#section-1), that identify resources without specifying the protocol through which those resources are retrieved.
+
+Enforcing that schemes must represent protocols (as opposed to resources) would ensure that Redox URLs are similar to the types of URLs seen in web browsers [\[1\]][1] [\[2\]][2] [\[3\]][3]. This change would mean that URLs self-document the method through which they can be interacted with. For example, a hypothetical `http:` scheme would be expected to implement the HTTP protocol rather than being some wrapper that expects web pages to be accessed as files.
 
 [1]: https://webmasters.stackexchange.com/a/77783  
 [2]: https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml  
 [3]: https://www.w3.org/TR/uri-clarification/#uri-partitioning
 
-Enforcing that schemes must represent protocols (as opposed to resources) would ensure that Redox URLs are similar to the types of URLs seen in web browsers. This change would mean that URLs self-document the method through which they can be interacted with. For example, a hypothetical `http:` scheme would be expected to implement the HTTP protocol rather than being some wrapper that expects web pages to be accessed as files.
-
-Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple daemons, such as `file://sys` and `file://env`. 
+Moving daemons into the authority section of URLs allows multiple daemons to be accessed from the same protocol. The `file:` protocol could be used for multiple partitions, such as `file://sda` and `file://sdb`.
 
 Introducing the concept of domains (with subdomains) under the authority section of URLs would allow daemons to host resources such as `file://example.com.http` to translate from one protocol to another.
 
-Domains could be a potential alternative to namespaces, although that's outside the scope of this RFC. Theoretically, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. They would then `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
-
+Domains could be a potential alternative to namespaces, although that's outside the scope of this RFC. The `http:` scheme could have a `www-dns` domain. Sites would be accessible via `http://example.com.www-dns`, then the user could `chroot http://www-dns` to make URLs such as `http://example.com` work. Or, a user could implement, for example, a `foobar` domain to route subdomains over the network to another Redox host. The user could then do `chroot ://raspberry-pi.foobar` to enter a namespace where all URLs are seen from the perspective of a Redox-running Raspberry Pi on the LAN.
 
 # Detailed design
 [design]: #detailed-design
 
 <!-- This is the bulk of the RFC. Explain the design in enough detail for somebody familiar with the language to understand, and for somebody familiar with the compiler to implement. This should get into specifics and corner-cases, and include examples of how the feature is used. -->
 
-Inititally, this RFC could be implemented without changing the Redox kernel. Scheme handlers could be written that would allow allocating domains. Existing schemes such as `env:` and `sys:` may be preserved for compatibility reasons.
-
-This section needs to be expanded.
+My understanding is that this RFC could inititally be implemented without changing the Redox kernel. Scheme handlers could be written that would allow allocating domains.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -87,7 +82,3 @@ URL standards dictate that `//` would typically point to `file://` on Redox. We 
 [unresolved]: #unresolved-questions
 
 <!-- What parts of the design are still TBD? -->
-
-How authority allocation and naming would be implemented should be discussed.
-
-
