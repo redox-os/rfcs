@@ -184,62 +184,95 @@ Every ring has two major operations:
 * `pop_front`, which tries pop pop an entry from the ring, or fails if the ring
   was empty, or shut down
 
-Implementation-wise, these rings simply read or write entries, and then
-increment the head or tail index, based on whether the operation is a push or
-pull operation. Since the queue is strictly SPSC, the producer can assume that
-it is safe to write the value and then increment the tail index, so that the
-consumer is aware of the write, only after it has been done. Popping works the
-same way, with the only difference being that the head index is written to and
-the tail index is read.
+Implementation-wise, both operations will first begin by fetching the status,
+and fail early if the ring has been registered as broken
+(`RingStatus::BROKEN`). The push operation will also fail early if dropped
+(`RingStatus::DROP`), while the pop operation will continue to drain the final
+elements when that occurs.  Any invalid bit pattern in the `sts` field will
+result in the `BROKEN` flag being set, marking the ring unrecoverable both for
+the producer and the consumer.
 
-The indices, represent regular array indices; the byte offset of the entry is
-simply calculated by multiplying the size of the entry, with the index.
-However, they must be decoded from the raw value in the atomics, by taking the
-raw value, modulo twice the number of entries.
+After that, the head and tail indices are fetched to later compare them. The
+most-significant-bit of the respective indices represent the _partial cycle
+state_. Namely, when the incrementing either index results in a new index that
+is greater than or equal to the fixed number of entries in the ring, the index
+part of the index field will be set back to zero, with the cycle flag toggled.
+If the index part of any of the index fields would be equal to or greater than
+the entry count _when fetched_, the ring will transition into the `BROKEN`
+state.
 
-In other words,
+Once both indices are fetched, with their partial cycle bits extracted from
+them, the cycle bits are XOR:ed, resulting in the _cycle state_.
 
-```math
-i \equiv r \pmod{2n}
-```
+The indices, represent regular array indices in the entries array. Therefore,
+the byte offset of the entry is simply calculated by multiplying the size of
+the entry, with the index.
 
-where $`i`$ is the index into the array, $`r`$ the raw atomic variable, and
-$`n`$ the number of entries in the ring.
+TODO: Ownership of the ring parts. The sender is allowed to do anything with
+the entries that are not available for popping, and the receiver is also
+allowed to manipulate the entries that are not yet popped. The current
+algorithm for pushing and popping simply pushes or pops a single item, but this
+can be made more efficient this way.
 
-Additionally, the ring buffer has a _cycle_ condition, which occurs somewhat
-frequently when the indices overflow the number of entries. The _push cycle_
-and _pop cycle_ flags are either 0 or 1, and are calculated by rounding down
-the quotient of the index with the number of entries, to the nearest integer.
-Based on the Exclusive OR (XOR) of these two flags, the _cycle_ will flip the
-roles of the head and tail index when comparing them, which happens before
-every push and pop operation, to check whether the ring is full or empty,
-respectively.
+#### Calculating the number of available and empty entry slots
 
-Therefore,
+The number of entries that can be popped by the receiver of a ring, is determined as follows:
 
-```math
-c_{head} \equiv \lfloor \frac{r_{head}}{n} \rfloor \pmod{2}
-```
-```math
-c_{tail} \equiv \lfloor \frac{r_{tail}}{n} \rfloor \pmod{2}
-```
-```math
-c = c_{head} \oplus c_{tail}
-```
+* _cycle state = false_: _available count = tail index - head_index_.
+* _cycle state = true_: _available count = total entry count - (head index - tail index)_
 
-where $`c`$ denotes the cycle flag, and $`\oplus`$ denotes Exclusive OR.
+Similarly, the number of entry slots that can be pushed into, is calculated as
+the total number of entries, subtracted by the available count.
 
-There is also a push epoch, and a pop epoch, which are global counters for each
-ring that are incremented on each respective operation. This is mainly used by
-the kernel to notify a user when a ring can be pushed to (after it was
+The _Empty_ condition occurs if and only if the number of available slots
+equals zero. This being true causes receiver to not be able to pop further
+entries, until more become available.
+
+Similarly, the _Full_ condition occurs if and only if the number of free slots
+equals zero, When true, the sender will be unable to push a new entry until the
+receiver has popped at least one. This naturally allows for basic congestion
+control, where the sender can only send additional entries as frequent as the
+receiver can handle.
+
+#### Pushing
+
+When the ring is not full, the sender may write arbitrary values to the region
+between the tail and head index, when the cycle state is false, or between the
+head and tail index, when the cycle state is true. Once the desired entries are
+written to this region, the sender may then increment the tail index, wrapping
+around the total count, as well as setting the partial cycle state accordingly.
+After that, the sender is no longer allowed to write to that entry, until the
+ring has cycled and it has become available again.
+
+Since the ring is strictly SPSC, the producer can assume exclusive access to
+the sender-owned region.
+
+#### Popping
+
+Popping works very much in the same way as pushing, with the only difference
+being that the receiver does not necessarily have write access to the entries,
+and can only read from the receiver-owned region. Rather than incrementing the
+tail index, the head index is incremented.
+
+#### Notification epochs
+
+There are also a push epoch, and a pop epoch, which are global counters for
+each ring that are incremented on each respective operation. This is mainly
+used by the kernel to notify a user when a ring can be pushed to (after it was
 previously full), or when it can be popped from (after it was previously
 empty). It also makes it simple for the kernel to quickly check those during
-scheduling, if needed. The reason why these are represented as epochs, is to
-allow the ring to truncate indices arbitrarily using modulo or bitwise AND, but
-also to allow a process to notify itself from another thread, without pushing
-any additional entry, which would not be possible for a full ring.
+scheduling, if needed. The reason why these are represented as epochs, is
+because it allows for quick checks whether new entries have been pushed since
+an earlier event, and it allows low-latency kernel polling to notify the other
+side of the ring without making a system call in the process.
+
+Userspace executors that use the Rust async model, should utilize these epochs
+in order to wake the executor from external wakers. If no kernel-mode polling
+has been set up, then the ring must be entered for the epoch updates to take
+effect.
 
 ## Interface layer
+
 The Redox `io_uring` implementation comes with a new scheme, `io_uring:`. The
 scheme provides only a top-level file, like `debug:`, which when opened creates
 a new `io_uring` instance in its _Initial_ state. By then writing the create
@@ -269,14 +302,15 @@ After a successful attachment, the instance will transition into the _Attached_
 state, where it is capable of submitting commands.
 
 ### Userspace-to-userspace
+
 In the userspace-to-userspace scenario, which has the benefit of zero kernel
 involvement (except for polling the epochs to know when to notify), the
-consumer process calls the `SYS_ATTACH_IORING` syscall, which takes two
+consumer process calls the `SYS_IORING_ATTACH` syscall, which takes two
 arguments: the file descriptor of the `io_uring` instance, together with the
 name of the scheme.
 
 The scheme will however receive a different syscall in a regular packet, namely
-`SYS_RECV_IORING`, which includes a temporary kernel-mapped buffer, containing
+`SYS_IORING_RECV`, which includes a temporary kernel-mapped buffer, containing
 already-mapped offsets to the four ring memory regions, as well as an
 `io_uring` instance file descriptor for the producer, linked to the consumer
 instance file descriptor.
@@ -310,33 +344,35 @@ In the future there might be scenarios where real addresses are used rather
 than offsets in this attachment mode, e.g. physical addresses for an NVME
 driver. The consumer and producer are free to negotiate their behavior anyway.
 
-When waiting for notification, the regular `SYS_ENTER_IORING` syscall may be
+When waiting for notification, the regular `SYS_IORING_ENTER` syscall may be
 invoked, that will cause the kernel to wait for the ring to update, blocking
 the process in the meantime. However, the primary notification mechanism for
 consumers, is using event queues in a primary userspace-to-kernel io_uring; by
-using the `FilesUpdate` opcode with the `EVENT_READ` flag (and `EVENT_WRITE`
+using the `RegisterEvents` opcode with the `EVENT_READ` flag (and `EVENT_WRITE`
 for notification when a ring is no longer full), with the `io_uring` instance
 file descriptor as target, an event will be triggered once the ring gets
 available completion entries.
 
 TODO: Right now the kernel polls rings using event queues or
-`SYS_ENTER_IORING`, but would it make sense to optimize this by putting the
+`SYS_IORING_ENTER`, but would it make sense to optimize this by putting the
 kernel virtual addresses for the rings, adjacently in virtual memory, and then
 using the "dirty" page table flags instead?
 
 ### Userspace-to-kernel
+
 The userspace-to-kernel attachment mode is similar; the process still calls
-`SYS_ATTACH_IORING`, with the exception of the kernel handling the request. The
+`SYS_IORING_ATTACH`, with the exception of the kernel handling the request. The
 kernel supports the same standard opcode set as other schemes do, with the
 advantage of being able to communicate with every open scheme for that process.
 
 This is the recommended mode, especially for applications, since it does not
 require one ring per consumer per producer, but only at least one ring on the
-consumer side. The kernel will delegate the syscalls pushed onto that
-`io_uring`, and talk to a scheme using a different `io_uring`. The kernel will
-also manage the buffers automatically here, as it has full access to them when
-processing syscall, which results in less overhead as no preregistered buffers
-or other shared memory is used.
+consumer side. The kernel will handle the syscalls pushed onto that `io_uring`,
+and possibly forward these to schemes using a kernel-to-userspace `io_uring`s.
+The kernel will also manage the buffers automatically here, as it has full
+access to them, as the kernel has access to all address space, when processing
+syscall. This results in less overhead as no preregistered buffers or other
+shared memory is used.
 
 When using an `io_uring` this way, a process pushes submission entries, and
 then calls `SYS_IORING_ENTER`, which is a regular syscall. The kernel then
@@ -350,6 +386,7 @@ the kernel, going to be directly scheduled, in or after `SYS_IORING_ENTER`, or
 is the kernel going to wait for it to be scheduled regularly first?
 
 ### Kernel-to-userspace
+
 The kernel-to-userspace mode is the producer counterpart of the
 userspace-to-kernel-mode; it shares the same properties as with the other, but
 the roles are reversed. A scheme may at any time receive a request to attach an
@@ -410,7 +447,7 @@ An additional drawback is the increased complexity of both using asynchronous
 I/O and regular blocking I/O in the kernel. The kernel may also have to keep
 track of the state of certain operations, instead of bouncing between userspace
 and kernel in a stack-like way, when schemes call schemes. Futures (and maybe
-async/await) might help with this: Alternatively, one could limit more complex
+async/await) might help with this. Alternatively, one could limit more complex
 syscalls, e.g. `SYS_OPEN` from having to be repeated by only allowing simple
 paths without symlinks, which reduces complex state.
 
@@ -422,7 +459,9 @@ to use SPSC queues, one could instead simply introduce `O_COMPLETION_IO` (which
 would be paired with `O_NONBLOCK`), `EVENT_READ_COMPLETION` and
 `EVENT_WRITE_COMPLETION`, and let the kernel retain the grants of the buffers
 until events with the aforementioned flags have been sent, to indicate that the
-buffers are not longer needed by the scheme process.
+buffers are not longer needed by the scheme process. However, this would still
+limit applications from executing more than one system call at a time. While it
+would be non-blocking, it would remain synchronous unlike `io_uring`.
 
 Additionally, while the kernel can obviously assist with notifying processes
 with lower overhead, this API could be implemented in userspace by using shared
@@ -452,6 +491,10 @@ If that were implemented, there would be a possibility for source-compatibility
 with liburing, especially if the entry types are exactly the same as Linux's
 (`struct io_uring_sqe` and `struct io_uring_cqe`). If the syscalls were to be
 emulated, this could also result possible complete emulation.
+
+And finally, the potential use of an SQE array with an indirect SQ (pushing
+indices to the SQE array rather than the SQEs directly), could be beneficial
+for certain applications.
 
 # References
 1. [https://kernel.dk/io_uring.pdf](https://kernel.dk/io_uring.pdf) - A
