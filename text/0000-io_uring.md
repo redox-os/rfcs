@@ -6,16 +6,16 @@
 # Summary
 [summary]: #summary
 
-`io_uring` is a low-latency high-throughput asynchronous I/O API, inspired by
-Linux's `io_uring` (since 5.1). In essence `io_uring` behaves like a regular
-SPSC channel or queue: the producer pushes entries, which the consumer pops.
-This interface provides two different rings for each `io_uring` instance,
-namely the _submission queue_ (SQ) and the _completion queue_ (CQ). The process
-making the syscall (which from now on is referred to as the _consumer_), sends
-a _submission queue entry_ (SQE or SE), which the process (or kernel)
-processing the syscall (referred to as the _producer_) handles, and then sends
-a _completion queue entry_ (CQE or CE). The Redox implementation also allows
-different roles for processes and the kernel, unlike with Linux.
+`io_uring` is a low-latency high-throughput asynchronous I/O interface,
+inspired by Linux's `io_uring` (since 5.1). In essence `io_uring` behaves like
+a regular SPSC channel or queue: the producer pushes entries, which the
+consumer pops.  This interface provides two different rings for each `io_uring`
+instance, namely the _submission queue_ (SQ) and the _completion queue_ (CQ).
+The process making the syscall (which from now on is referred to as the
+_consumer_), sends a _submission queue entry_ (SQE or SE), which the process
+(or kernel) processing the syscall (referred to as the _producer_) handles, and
+then sends a _completion queue entry_ (CQE or CE). The Redox implementation
+also allows different roles for processes and the kernel, unlike with Linux.
 
 # Motivation
 [motivation]: #motivation
@@ -45,7 +45,7 @@ not read from the disk by itself, but has to be started by the driver. The way
 `xhcid` handles this is by having two files allocated for each hardware
 endpoint: `ctl` and `data`. Not only is it much more complex and complicated
 both for the driver and the driver user, but it also requires two separate
-syscalls, and thus causes more context switches than it needs to.
+syscalls, and thus causes more context switches than it necessary.
 
 # Detailed design
 [design]: #detailed-design
@@ -105,10 +105,11 @@ There are two types of submission entries, which are `SqEntry32` and
 The reason for these dinstinct entry sizes, is to be able to let the entries
 take up less space when 64-bit addressing is not needed, or for architectures
 which do not support 64-bit addressing. Apart from most other structures within
-the `syscall` crate, which mainly use `usize` for integers, these entry structs
-always use fixed size integers, to make sure that every byte in every struct is
-used (while still allowing for future expandability). The 64-bit definitions
-for these entry types are the following (possibly simplified):
+the `syscall` crate, which mainly use `usize` for integers, these entry
+structures always use fixed size integers, to make sure that every byte in
+every struct is used (while still allowing for future expandability). The
+64-bit definitions for these entry types are the following (possibly
+simplified):
 
 ```rust
 // 64 bytes long
@@ -257,7 +258,7 @@ tail index, the head index is incremented.
 #### Notification epochs
 
 There are also a push epoch, and a pop epoch, which are global counters for
-each ring that are incremented on each respective operation. This is mainly
+each ring that are incremented on each respective operation. These are mainly
 used by the kernel to notify a user when a ring can be pushed to (after it was
 previously full), or when it can be popped from (after it was previously
 empty). It also makes it simple for the kernel to quickly check those during
@@ -319,13 +320,11 @@ This mode is generally somewhat specialized, because the kernel may have to
 poll the rings on its own (which perhaps some magic trickery of putting every
 `io_uring` allocation in its own adjacent group of page tables, and checking
 the "dirty" flag on x86_64), and because the buffers have to be managed
-externally.
-
-For that type of memory management to be possible, the kernel provides an
-efficient way for consumers to quickly add new preallocated chunks in a buffer
-pool; by invoking `SYS_DUP` on a userspace-to-userspace `io_uring` instance
-file descriptor, a new pool file descriptor will be created. The pool file
-descriptor, can be mmapped from an arbitrary offset, which will allocate
+externally. For that type of memory management to be possible, the kernel
+provides an efficient way for consumers to quickly add new preallocated chunks
+in a buffer pool; by invoking `SYS_DUP` on a userspace-to-userspace `io_uring`
+instance file descriptor, a new pool file descriptor will be created. The pool
+file descriptor, can be mmapped from an arbitrary offset, which will allocate
 memory, and push an allocation entry to an internal list.
 
 The producer can do the same with its instance file descriptor, with the
@@ -425,7 +424,7 @@ the `io_uring` receives the last items and then also destroys its instance.
 [drawbacks]: #drawbacks
 
 Since Linux handles every syscall within ring 0, no extra communication needs
-to happen when dealing with addresses; the kernel can simply map a userspace
+to occur when dealing with addresses; the kernel can simply map a userspace
 address (if it is not already mapped), do its work, and then push a completion
 entry. Redox has a similar mode: userspace-to-kernel. One downside with this
 compared to how Linux works, is that the kernel has to use two rings: one
