@@ -133,8 +133,10 @@ pub struct SqEntry64 {
     pub addr: u64,
     // for syscalls taking an offset, this specifies that that offset
     pub offset: u64,
-    // reserved for future use and must be zero
-    pub _rsvd: [u64; 2],
+    // two additional fields to pad the struct to 64 bytes
+    pub additional1: u64,
+    // these are only used for certain syscalls
+    pub additional2: u64,
 }
 
 // 32 bytes long
