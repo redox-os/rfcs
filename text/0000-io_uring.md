@@ -193,34 +193,32 @@ elements when that occurs.  Any invalid bit pattern in the `sts` field will
 result in the `BROKEN` flag being set, marking the ring unrecoverable both for
 the producer and the consumer.
 
-After that, the head and tail indices are fetched to later compare them. The
-most-significant-bit of the respective indices represent the _partial cycle
-state_. Namely, when the incrementing either index results in a new index that
-is greater than or equal to the fixed number of entries in the ring, the index
-part of the index field will be set back to zero, with the cycle flag toggled.
-If the index part of any of the index fields would be equal to or greater than
-the entry count _when fetched_, the ring will transition into the `BROKEN`
-state.
+After that, the raw head and tail indices are fetched to later compare them.
+They are converted to the actual indices, by calculating the bitwise AND
+between the raw indices, and the index mask, which itself is calculated by
+subtracting the entry count by one. Effectively, this also constrains the
+possible entry counts to powers of two; however, it comes with various
+benefits, such as simplifying push and pop operations, as well as eliminating
+relatively expensive division instructions. Furthermore, it makes handling of
+integer overflows trivial, as it only needs to rely on natural wrapping. Hence,
+the entry count must also not exceed half of the largest number representable
+by the word size, even though this limit is very unlikely to be met in practice.
 
-Once both indices are fetched, with their partial cycle bits extracted from
-them, the cycle bits are XOR:ed, resulting in the _cycle state_.
+The computed indices, represent regular array indices in the entries array.
+Therefore, the byte offset of the entry is simply calculated by multiplying the
+size of the entry, with the index.
 
-The indices, represent regular array indices in the entries array. Therefore,
-the byte offset of the entry is simply calculated by multiplying the size of
-the entry, with the index.
-
-TODO: Ownership of the ring parts. The sender is allowed to do anything with
-the entries that are not available for popping, and the receiver is also
-allowed to manipulate the entries that are not yet popped. The current
-algorithm for pushing and popping simply pushes or pops a single item, but this
-can be made more efficient this way.
+TODO: Document ownership of the ring parts. The sender is (or should in theory,
+be) allowed to do anything with the entries that are not available for popping,
+and the receiver is also allowed to manipulate the entries that are not yet
+popped.  The current algorithm for pushing and popping simply pushes or pops a
+single item, but it can be made more efficient this way.
 
 #### Calculating the number of available and empty entry slots
 
-The number of entries that can be popped by the receiver of a ring, is determined as follows:
-
-* _cycle state = false_: _available count = tail index - head_index_.
-* _cycle state = true_: _available count = total entry count - (head index - tail index)_
+The number of entries that can be popped by the receiver of a ring, is
+determined by subtracting the raw tail index by the raw head index. Note that
+this may underflow, since those indices can wrap.
 
 Similarly, the number of entry slots that can be pushed into, is calculated as
 the total number of entries, subtracted by the available count.
@@ -238,12 +236,10 @@ receiver can handle.
 #### Pushing
 
 When the ring is not full, the sender may write arbitrary values to the region
-between the tail and head index, when the cycle state is false, or between the
-head and tail index, when the cycle state is true. Once the desired entries are
-written to this region, the sender may then increment the tail index, wrapping
-around the total count, as well as setting the partial cycle state accordingly.
-After that, the sender is no longer allowed to write to that entry, until the
-ring has cycled and it has become available again.
+between the tail and head index. Once the desired entries are written to this
+region, the sender may then increment the tail index, possibly wrapping around
+to zero. After that, the sender is no longer allowed to write to that range of
+entries, until the ring has cycled back, and it has become available again.
 
 Since the ring is strictly SPSC, the producer can assume exclusive access to
 the sender-owned region.
@@ -271,6 +267,12 @@ Userspace executors that use the Rust async model, should utilize these epochs
 in order to wake the executor from external wakers. If no kernel-mode polling
 has been set up, then the ring must be entered for the epoch updates to take
 effect.
+
+TODO: Given that the ring indices now use natural wrapping and are masked,
+could this instead be replaced by a flag, that other threads can set to awake
+the process which has entered the ring, in polling mode? Otherwise, if a system
+call is needed anyway when not polling, this could be replaced by triggering an
+interrupting signal.
 
 ## Interface layer
 
