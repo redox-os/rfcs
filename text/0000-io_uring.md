@@ -45,7 +45,7 @@ not read from the disk by itself, but has to be started by the driver. The way
 `xhcid` handles this is by having two files allocated for each hardware
 endpoint: `ctl` and `data`. Not only is it much more complex and complicated
 both for the driver and the driver user, but it also requires two separate
-syscalls, and thus causes more context switches than it necessary.
+syscalls, and thus causes more context switches than necessary.
 
 # Detailed design
 [design]: #detailed-design
