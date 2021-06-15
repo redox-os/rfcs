@@ -51,7 +51,9 @@ syscalls, and thus causes more context switches than necessary.
 [design]: #detailed-design
 
 ## Ring layer
+
 ### Ring operation
+
 On the technical side, each `io_uring` instance comprises two rings - the
 submission ring and the completion ring. These rings reside in shared memory,
 which is either shared by the kernel and a process, or two processes. Every
@@ -60,12 +62,11 @@ memory mappings managed by the kernel). The first region is exactly one page
 large (4 KiB on x86_64, however so long as the ring header fits within a page,
 architectures with smaller page sizes would also be able to use those), and
 contains the ring header, which is used for atomically accessed counters such
-as indices and epochs. Meanwhile, the second region contains the ring entries,
-which must for performance purposes be aligned to a multiple of its own size.
-Hence, with two rings for command submission and command completion, and two
-regions per ring, this results in two fixed-size regions and two variably-sized
-regions (dependent on the number of submission and completion entries,
-respectively).
+as indices. Meanwhile, the second region contains the ring entries, which must
+for performance purposes be aligned to a multiple of its own size.  Hence, with
+two rings for command submission and command completion, and two regions per
+ring, this results in two fixed-size regions and two variably-sized regions
+(dependent on the number of submission and completion entries, respectively).
 
 ### Ring data structures
 
@@ -80,9 +81,6 @@ struct CachePadded<T>(pub T);
 // Generic type parameter T omitted, for simplicity.
 #[repr(C)]
 pub struct Ring {
-    // the number of accessible entries in the ring, must be a power of two.
-    entry_count: usize,
-
     // the index of the head of the ring, from which entries are popped.
     head_index: CachePadded<AtomicUsize>,
 
@@ -91,30 +89,20 @@ pub struct Ring {
 
     // various status flags, currently only implemented for shutting down rings.
     status: CachePadded<AtomicUsize>,
-
-    // a counter incremented on every push_back operation
-    push_epoch: CachePadded<AtomicUsize>,
-
-    // a counter incremented on every pop_front operation
-    pop_epoch: CachePadded<AtomicUsize>,
 }
 ```
 
-There are two types of submission entries, which are `SqEntry32` and
-`SqEntry64`; there are also `CqEntry32` and `CqEntry64` for completion entries.
-The reason for these dinstinct entry sizes, is to be able to let the entries
-take up less space when 64-bit addressing is not needed, or for architectures
-which do not support 64-bit addressing. Apart from most other structures within
-the `syscall` crate, which mainly use `usize` for integers, these entry
-structures always use fixed size integers, to make sure that every byte in
-every struct is used (while still allowing for future expandability). The
-64-bit definitions for these entry types are the following (possibly
-simplified):
+There is one submission entry type called `SqEntry` and one completion entry
+type called `CqEntry`. Apart from most other structures within the `syscall`
+crate, which mainly use `usize` for integers, these entry structures always use
+fixed size integers, to make sure that every byte in every struct is used
+(while still allowing for future expandability). The definitions for these
+entry types are the following (somewhat simplified):
 
 ```rust
 // 64 bytes long
 #[repr(C, align(64))]
-pub struct SqEntry64 {
+pub struct SqEntry {
     // the operation code negotiated between the producer and consumer
     pub opcode: u8,
     // flags specific to entries and how they behave
@@ -138,46 +126,46 @@ pub struct SqEntry64 {
     // these are only used for certain syscalls
     pub additional2: u64,
 }
-
-// 32 bytes long
-#[repr(C, align(32))]
-pub struct CqEntry64 {
-    // the same value as specified in the corresponding submission entry
+// 16 bytes long
+#[repr(C, align(16))]
+pub struct CqEntry {
+    // an arbitrary number or pointer associating this CQE with its SQE,
+    // OR, the `extra` field of the second CQE in a pair.
     pub user_data: u64,
-    // the "return value" of the syscall, optionally the flags field can extend this
+    // the lower 32 bits of the syscall result, or higher 32 bits of the second
+    // CQE in a pair.
+    pub status: u32,
+    // the lower 32 bits of the CQE flags, or higher 32 bits of the second CQE
+    // in a pair.
+    //
+    // this field also indicates whether this CQE is single or double.
+    pub flags: u32,
+}
+```
+
+Sometimes when a syscall returns a number greater than 32 bits wide, it becomes
+crucial that this value be storable in the CQEs. However, since many syscalls
+likely never exceed values which require 64 bits (and Linux has an upper cap on
+2 GiB for all I/O requests), we use a smaller type. Therefore, there exist both
+"base" and "extended" CQEs, where such a pair is indicated by the `EXTENDED`
+CQE flag. If set, the first CQE will be followed by an additional. Together
+they form a pseudo-structure like this:
+
+```rust
+// 32 bytes long
+pub struct AssembledCqes {
+    pub user_data: u64,
     pub status: u64,
-    // miscellaneous flags describing the completion
     pub flags: u64,
-    // extra eight bytes of the return value (optional)
     pub extra: u64,
 }
 ```
 
-Meanwhile, the 32-bit (same fields and meanings, but with different sizes):
-```rust
-// 32 bytes long
-#[repr(C, align(32))]
-pub struct SqEntry32 {
-    pub opcode: u8,
-    pub flags: u8,
-    pub priority: u16,
-    pub syscall_flags: u32,
-    pub fd: u32,
-    pub len: u32,
-    pub user_data: u32,
-    pub addr: u32,
-    pub offset: u64,
-}
-
-// 16 bytes long
-#[repr(C, align(16))]
-pub struct CqEntry32 {
-    pub user_data: u32,
-    pub status: u32,
-    pub flags: u32,
-    pub extra: u32,
-}
-```
+That structure is never used in the interface, but shows what values are
+communicated when dual CQEs are used. The `user_data` field comes from the
+first CQE, as does the lower 32 bits of the `status` and `flags` fields. The
+`extra` field comes the `user_data` field of the second CQE, which logically
+also stores the upper bits of the `status` and `flags` fields, respectively.
 
 ### Algorithms
 Every ring has two major operations:
@@ -210,11 +198,25 @@ The computed indices, represent regular array indices in the entries array.
 Therefore, the byte offset of the entry is simply calculated by multiplying the
 size of the entry, with the index.
 
-TODO: Document ownership of the ring parts. The sender is (or should in theory,
-be) allowed to do anything with the entries that are not available for popping,
-and the receiver is also allowed to manipulate the entries that are not yet
-popped.  The current algorithm for pushing and popping simply pushes or pops a
-single item, but it can be made more efficient this way.
+Both the sender and the receiver can own either one or two contiguous ranges,
+depending on the cycle bit, which is computed by shifting the head and tail
+indices by the entry count bits, checking whether the first bit of the result
+for each index, and then calculating the XOR of those two bits. In other words,
+it has cycled if the tail has overflown an odd number of times, and the head
+has overflown an even number of times, or vice versa. If the cycle condition is
+not present, then the sender logically owns the range `[tail, end)` and also
+`[0, head)` (two ranges), whereas the receiver logically owns `[head, tail)`
+(one range). Likewise, if the cycle condition _is_ present, then the receiver
+owns `[tail, head)` (one range) while the sender owns both `[head, end)` and
+`[0, tail)` (two ranges).
+
+The ring header page is always read-write by both the sender and receiver;
+however, the entry pages are normally read-write only for the sender, and
+read-only for the receiver. On architectures which support write-only pages,
+the sender may then only have write access. Therefore, it unfortunately does
+not align well with Rust's ownership rules, and thereby while it is possible to
+grant mutable references to the sender, the receiver can never obtain regular
+shared references, which are not inside of `UnsafeCell`.
 
 #### Calculating the number of available and empty entry slots
 
@@ -253,29 +255,6 @@ being that the receiver does not necessarily have write access to the entries,
 and can only read from the receiver-owned region. Rather than incrementing the
 tail index, the head index is incremented.
 
-#### Notification epochs
-
-There are also a push epoch, and a pop epoch, which are global counters for
-each ring that are incremented on each respective operation. These are mainly
-used by the kernel to notify a user when a ring can be pushed to (after it was
-previously full), or when it can be popped from (after it was previously
-empty). It also makes it simple for the kernel to quickly check those during
-scheduling, if needed. The reason why these are represented as epochs, is
-because it allows for quick checks whether new entries have been pushed since
-an earlier event, and it allows low-latency kernel polling to notify the other
-side of the ring without making a system call in the process.
-
-Userspace executors that use the Rust async model, should utilize these epochs
-in order to wake the executor from external wakers. If no kernel-mode polling
-has been set up, then the ring must be entered for the epoch updates to take
-effect.
-
-TODO: Given that the ring indices now use natural wrapping and are masked,
-could this instead be replaced by a flag, that other threads can set to awake
-the process which has entered the ring, in polling mode? Otherwise, if a system
-call is needed anyway when not polling, this could be replaced by triggering an
-interrupting signal.
-
 ## Interface layer
 
 The Redox `io_uring` implementation comes with a new scheme, `io_uring:`. The
@@ -309,7 +288,7 @@ state, where it is capable of submitting commands.
 ### Userspace-to-userspace
 
 In the userspace-to-userspace scenario, which has the benefit of zero kernel
-involvement (except for polling the epochs to know when to notify), the
+involvement (except for polling the ring indices to know when to notify), the
 consumer process calls the `SYS_IORING_ATTACH` syscall, which takes two
 arguments: the file descriptor of the `io_uring` instance, together with the
 name of the scheme.
@@ -414,7 +393,7 @@ the its own global file descriptors.
 
 Since the kernel initiates these by itself, and keeps track of state, no
 dedicated syscall resembling `SYS_IORING_ENTER` needs to be called, since the
-kernel can simply check whether the epochs have been incremented or not.
+kernel can simply check whether the indices have been changed or not.
 
 ### Deallocation
 The four `io_uring` memory regions are kernel managed, and thus they only
