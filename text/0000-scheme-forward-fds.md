@@ -38,7 +38,10 @@ The same goes for userspace. Now, imagine the task of handling disk partitions.
 Currently, this is done in the disk drivers, mainly to maintain flexibility and
 performance, as a middleman scheme would add latency to every single byte read
 or written. And while it may be reasonable to add this duplicate functionality
-to multiple drivers, the same problem applies for e.g. firewalls.
+to multiple drivers, the same problem applies for e.g. firewalls. __A chroot
+tool implemented via schemes and namespaces, would also become zero-cost for
+data, even if it may have to filter metadata access, i.e. directory
+structures.__
 
 # Detailed design
 [design]: #detailed-design
