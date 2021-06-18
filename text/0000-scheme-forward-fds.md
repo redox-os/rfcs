@@ -1,6 +1,6 @@
 - Feature Name: scheme_forward_fds
 - Start Date: 2021-06-12
-- RFC PR: (leave this empty)
+- RFC PR: https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/17
 - Redox Issue: (leave this empty)
 
 # Summary
