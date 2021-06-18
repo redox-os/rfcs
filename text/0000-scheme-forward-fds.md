@@ -83,7 +83,7 @@ the client that it wants to send it a file descriptor via previously suggested
 "fd channels", like `cable:` or `sendfd:`. However, this would require the
 client to implement different logic for this, and thus would not be as
 flexible. Nothing really forbids both of two such interfaces to be used in
-parallel, 
+parallel.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
