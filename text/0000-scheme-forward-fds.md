@@ -28,7 +28,7 @@ be to mask the interrupt and directly switch to the handler, almost
 signal-like. However, we still need the kernel to protect userspace processes
 from each other, and for the IRQ scheme, this means that the kernel will have
 to keep track of which process owns which IRQ. I/O ports are very similar, and
-if the kernel would do this, then it would in additional have to track ranges,
+if the kernel would do this, then it would in addition have to track ranges,
 almost like grants. However, with the feature described by this RFC, we could
 designate resource allocation to a userspace scheme, and give that scheme
 handler near-full access to the kernel scheme. Once opened by a client, it will
