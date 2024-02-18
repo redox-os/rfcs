@@ -59,7 +59,7 @@ struct SigCtlRegion {
     ctl: AtomicU2x64,   // (128-bit)
     old_ip: usize,      // eip/rip/pc 
     old_reg_a: usize,   // eax/rax/x0
-    old_reg_b: usize,   // edx/rdx/x1
+    old_reg_b: usize,   // eflags/rflags/x1
     q: [RtSig; 33],
     qhead: u8,
     qtail: u8,
@@ -130,6 +130,46 @@ nonatomically, knowing that the kernel still needs the same lock to send new
 signals. The kernel masks all signals when entering the trampoline. They are
 then unmasked depending on the sigaction information (`SA_NODEFER` and
 `sa_mask`).
+
+#### Trampoline
+
+The `entry` field of the kernel-stored `SigEntry`, will point to the _signal
+trampoline_. The kernel will save two registers (rAX/rFLAGS on x86) that can be
+used as scratch registers. The trampoline will need to calculate the new stack
+pointer, taking into account the potential alternate signal stack
+(`sigaltstack`). On x86 this might look like
+
+```nasm
+trampoline:
+    mov fs:[FS_OFF_OLD_RSP], rsp
+    mov rax, fs:[FS_OFF_SIGALTSTACK_BASE]
+
+    cmp rsp, rax
+    ja .inside_sigaltstack
+
+    add rax, fs:[FS_OFF_SIGALTSTACK_SIZE] ; get altstack end
+    cmp rsp, rax
+    jbe .inside_sigaltstack
+
+    mov rsp, rax
+
+.with_stack:
+    ; stack set up
+
+    sub rsp, 4096
+    xsaveopt [rsp]
+    call rust
+    xrstor [rsp]
+    add rsp, 4096
+
+    ; (restore rflags using seto/sahf)
+    ; (indirect jump to old_rip)
+
+.inside_sigaltstack:
+    sub rsp, REDZONE_SIZE
+    and rsp, -STACK_ALIGN
+    jmp .with_stack
+```
 
 ## Fork and exec
 
