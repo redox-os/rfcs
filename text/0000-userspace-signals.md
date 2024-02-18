@@ -1,6 +1,6 @@
 - Feature Name: userspace_signals
 - Start Date: 2024-02-16
-- RFC PR: (leave this empty)
+- RFC PR: https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/19
 - Redox Issue: (leave this empty)
 
 # Summary
@@ -63,6 +63,8 @@ struct SigCtlRegion {
     q: [RtSig; 33],
     qhead: u8,
     qtail: u8,
+    // TODO?
+    ll: [(*const Tcb, *const Tcb); 64],
     // Current signal information
     signo: u8,
 }
@@ -116,7 +118,7 @@ userspace synchronizes with the kernel, possibly on another hardware thread.
 
 The kernel will set the corresponding pending bit, followed by reading the
 masked and pending bit (directly via the physaddr of the provided page). If
-both are set simultaneously, the signal will be delivered.
+pending is set while masked is not, the signal will be delivered.
 
 ### Delivery
 
@@ -225,8 +227,9 @@ TODO
 [drawbacks]: #drawbacks
 
 This adds complexity, and partially blurs the line between userspace and
-kernel. However, from a microkernel perspecive, it would be useful to move as
-much of POSIX as possible to userspace.
+kernel. The TCB will also significantly grow in size, some of which also needs
+to store pthread information. However, from a microkernel perspecive, it would
+be useful to move as much of POSIX as possible to userspace.
 
 # Alternatives
 [alternatives]: #alternatives
@@ -242,7 +245,15 @@ sigreturn syscalls.
 
 TODO: How should multithreaded signal delivery work? It could be implemented by
 using a separate signal control region, global to the entire process, where the
-kernel delivery code
+kernel delivery code checks its procmask first. Each TCB can have linked-list
+entries (64/128 entries * 64 bits, i.e. 512/1024 bytes, probably doubly-linked)
+to properly scale process-level signal delivery with the number of threads.
+
+In that case, there would be a slower sigprocmask (or rather, pthread_sigmask)
+that changes both its local procmask and the process-level procmask depending
+on the depth of the linked list of that signal, and a faster temporary
+sigprocmask. The temporary sigprocmask would be used only in libc-internal
+critical sections.
 
 ## Partial sigprocmask handling
 
