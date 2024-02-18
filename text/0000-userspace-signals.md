@@ -25,10 +25,14 @@ to wrap each open call in two sigprocmask syscalls. The same issue will become
 more significant in the future, should relibc for example emulate POSIX file
 descriptors.
 
+Moving the signal implementation to userspace will eliminate the need for the
+`sigprocmask`, `sigaction`, and `sigreturn` syscalls. It will however, if this
+proposal is implemented, need a `kill`/`sigqueue` syscall.
+
 # Detailed design
 [design]: #detailed-design
 
-# Proc scheme API
+## Proc scheme API
 
 The kernel would change `/<proc>/sigstack` to `/<proc>/sigentry`, which would
 provide access to the following struct:
@@ -56,7 +60,9 @@ struct SigCtlRegion {
     old_ip: usize,      // eip/rip/pc 
     old_reg_a: usize,   // eax/rax/x0
     old_reg_b: usize,   // edx/rdx/x1
-    queue: [RtSig; 33],
+    q: [RtSig; 33],
+    qhead: u8,
+    qtail: u8,
     // Current signal information
     signo: u8,
 }
@@ -119,7 +125,9 @@ getting exclusive access to the saved registers. The instruction pointer is
 saved into `old_ip`, and two additional scratch registers are similarly saved.
 Since the target thread is not running at that time, the mask can be set
 nonatomically, knowing that the kernel still needs the same lock to send new
-signals. The kernel masks all signals when entering the trampoline.
+signals. The kernel masks all signals when entering the trampoline. They are
+then unmasked depending on the sigaction information (`SA_NODEFER` and
+`sa_mask`).
 
 ## Fork and exec
 
@@ -134,9 +142,22 @@ platforms).
 
 TODO: what about `pthread_create`?
 
-## SIGCONT, SIGSTOP(/SIGTSTP,SIGTTIN,SIGTTOU)
+## SIGCONT, SIGSTOP(/SIGTSTP,SIGTTIN,SIGTTOU), SIGKILL
 
-TODO
+POSIX states that SIGKILL and SIGSTOP are not maskable, and cannot be handled
+in userspace or ignored. Luckily, this frees up 4 additional bits. The "SIGKILL
+masked", "SIGKILL pending", and "SIGSTOP masked" bits, shall instead indicate
+whether the action for SIGTSTP, SIGTTIN, and SIGTTOU, respectively, shall
+exhibit the same SIGSTOP logic in the kernel's kill implementation.
+
+The SIGCONT signal cannot be ignored either, but userspace can choose whether
+or not to additionally handle it as regular signals. The pending and masked
+bits for SIGCONT will thus have the same behavior as regular signals, except
+`kill` will transition the thread from _stopped_ to _blocked_ first.
+
+POSIX requires the generation of SIGCONT to discard all pending stop signals,
+and vice versa. This should be relatively simple to implement provided the kill
+syscall is mutex-synchronized. Alternatively, it would need to use a CAS loop.
 
 ## Realtime signals
 
@@ -147,29 +168,81 @@ queue, allowing multiple independent signals of the same number. Realtime
 signals must also be able to provide a value, either an `int` or a pointer.
 
 This would be implemented using the `queue` field in the signal control region.
-Requiring exclusive access in the kernel to send realtime signals, this queue
-can be accessed nonatomically, and would store both the signal number and
-sigval.
+The `qhead` and `qtail` atomic fields together divide the queue array into a
+consumer-owned and producer-owned half. The consumer half shall thus be read
+nonatomically by the thread, and the producer half written nonatomically by the
+kernel. The `qtail` field shall be written only by the producer (kernel), and
+the `qhead` field by the consumer (thread).
+
+Since the consumer half is exclusively owned by the thread, it can dynamically
+update the pending bits accordingly based on which nonmasked realtime signals
+are present in the queue. The kernel will set the pending bits as usual when
+sending realtime signals.
+
+This iteration will likely be very quick, so long as the number of possible
+signals does not significantly increase. Should this become a performance
+issue, the queue array may be converted to a structure-of-arrays, where the
+signal numbers can be packed, and counted quickly using SIMD. POSIX only
+requires the implementation to provide 8 realtime signals, and the threading
+implementation requires two additional signals (cancelation and timer)
+
+## raise
+
+Raise can be implemented entirely in userspace, by CASing the signal word, and
+checking whether the mask was unset exactly before the CAS.
+
+## sigprocmask
+
+Sigprocmask should modify each atomic subword sequentially, postponing (by
+setting the pending flag or requeueing realtime signals) if newly blocked, if
+possible. However, it should suffice to only guarantee the new procmask is
+used, after sigprocmask has returned, allowing signals to be delivered inside
+sigprocmask.
+
+Changing the sigprocmask should be done by CASing the atomic subword, retrying
+if the word is simultaneously modified (which is true if and only if new
+signals are generated). The mask is again calculated as the logical OR of the
+internal libc ignmask, and the internal libc procmask.
+
+## sigaction
+
+Sigaction will be implemented entirely in libc. With signals disabled in the
+`sigaction` function itself, it can use regular mutex-based synchronization,
+including synchronization between `sigaction` and the signal trampoline running
+on other threads. Setting the action to SIG_IGN will modify the ignmask, and
+setting it to SIG_DFL will either modify the signal-is-stop bits or set it to a
+builtin default handler.
+
+TODO: Synchronization? If signal A was SIG_DFL, and thread A queued signal A
+and then set the signal to "ignored", is the signal allowed to be ignored if it
+can be proved it was sent before the sigaction?
+
+# sigwait, sigsuspend, etc
+
+TODO
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 This adds complexity, and partially blurs the line between userspace and
-kernel.
+kernel. However, from a microkernel perspecive, it would be useful to move as
+much of POSIX as possible to userspace.
 
 # Alternatives
 [alternatives]: #alternatives
 
-The obvious, and probably preferred short-term alternative, should be to
-implement signal handling in the kernel, with sigprocmask and sigreturn
-syscalls.
+The obvious, and probably preferred short-term alternative, would be to
+implement signal handling in the kernel, with sigprocmask, sigaction, kill, and
+sigreturn syscalls.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
 ## Multithreaded signal delivery
 
-How should multithreaded signal delivery work?
+TODO: How should multithreaded signal delivery work? It could be implemented by
+using a separate signal control region, global to the entire process, where the
+kernel delivery code
 
 ## Partial sigprocmask handling
 
@@ -177,7 +250,8 @@ Since 128-bit atomics cannot be guaranteed even on x86_64, libc must be able to
 detect if a signal occurs inside the sigprocmask setter itself. This is not
 unsolvable, but nontrivial. Two proposed solutions: (1) specify an instruction
 pointer range in which the kernel finishes the sigprocmask atomic write
-(holding the kill/sigqueue lock), or (2) specify a similar range, where the
-userspace signal trampoline performs the same check, and then either postpones
-the signal if the sigprocmask would otherwise have blocked it, or reverts the
-procmask, delivers the signal, and then retries the procmask.
+(holding the kill/sigqueue lock), or (2) specify a similar range or use a
+per-thread flag, where the userspace signal trampoline performs the same check,
+and then either postpones the signal if the sigprocmask would otherwise have
+blocked it, or reverts the procmask, delivers the signal, and then retries the
+procmask.
