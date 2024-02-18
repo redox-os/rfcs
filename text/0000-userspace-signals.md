@@ -306,3 +306,14 @@ per-thread flag, where the userspace signal trampoline performs the same check,
 and then either postpones the signal if the sigprocmask would otherwise have
 blocked it, or reverts the procmask, delivers the signal, and then retries the
 procmask.
+
+## Who should send the signals?
+
+In this proposal, the kernel will be responsible for sending the signals, and
+userspace will merely control sigprocmasking, and raising some signals on its
+own. However, if performance is not sufficiently significant for this to stay
+in the kernel, it might make sense for _kill(3)_ and/or _sigqueue(3)_ to be
+implemented as a (fast synchronous) IPC call to the process manager. A process
+manager has been suggested as a way for the kernel to only abstract _contexts_,
+and let that manager define _threads_, _processes_, _sessions_, and _process
+groups_.
