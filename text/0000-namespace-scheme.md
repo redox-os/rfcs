@@ -11,7 +11,7 @@ As discussed between jeremy_soller and rw_van.
 Adopting the new scheme naming format `/scheme/scheme_name` creates an ambiguity when mounting a scheme in the effective namespace. Mounting a scheme will change from `open(":scheme_name", O_CREAT)` to
 
 ```
-open("/scheme/nnamespace/scheme_name", O_CREAT | O_EXCL)
+open("/scheme/namespace/scheme_name", O_CREAT | O_EXCL)
 ```
 
 (See [Unresolved questions](#unresolved-questions) for naming options and issues.)
@@ -102,4 +102,4 @@ Conceivably, Redox could use a status bit to indicate a path that represents a "
 
 4. Should we change for `open` to `mount` when creating a new scheme? It includes additional flags and options.
 
-5. Assume that when a scheme is restarted, it will call `open("/scheme/ns/scheme_name", O_CREAT | O_EXCL)`. If those flags are not provided, then the open is to query the namespace about the state of the scheme. What actions can be performed on the resulting fd, and what information is provided?
+5. Assume that when a scheme is restarted, it will call `open("/scheme/namespace/scheme_name", O_CREAT | O_EXCL)`. If those flags are not provided, then the open is to query the namespace about the state of the scheme. What actions can be performed on the resulting fd, and what information is provided?
