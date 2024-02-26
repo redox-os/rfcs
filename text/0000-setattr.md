@@ -74,7 +74,10 @@ fn getattr<Tin, Tout>(fd: usize,
 The `data` will vary. It can be binary or a text slice.
 It will be read/written as a [u8; n] slice.
 It is recommended that a serialization format be used,
-e.g. `toml`, which will allow fields to be left blank.
+e.g. `ron` with `#[skip_serializing_none]`,
+which will allow optional fields to be left out.
+In this case, `T` will be `&str`.
+
 However, for well-defined struct formats such as `termios`,
 it is reasonable to use existing data structure definitions.
 
@@ -183,7 +186,11 @@ Linux compatible calls.
 # Alternatives
 [alternatives]: #alternatives
 
-Use the Linux system calls.
+1. Use the Linux system calls.
+
+2. Use Plan 9 style paths, which treat configurable
+entities as a directory with a collection of read/write files
+that represent settings and control.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
