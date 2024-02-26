@@ -59,52 +59,69 @@ The signatures are
 ```
 /// Return the size of inbuf on success,
 /// -errno on failure
-fn setattr<T>(fd: usize, inbuf: AttrBuf<T>) -> isize;
+fn setattr<T>(fd: usize, protocol: &str, inbuf: T) -> isize;
 
-/// Return the size of outbuf on success,
+/// Return the size of the outbuf content on success,
 /// -errno on failure
 fn getattr<Tin, Tout>(fd: usize,
-    inbuf: AttrBuf<Tin>,
-    outbuf: mut AttrBuf<Tout>) -> isize;
-
-/// Aligned to an 8 byte boundary
-struct AttrBuf<T> {
-    /// The size of the struct (maximum 4k)
-    size: u16,
-    /// Target can be the resource, scheme, or kernel
-    target: [u8; 2],
-    /// The protocol and version of the request (typically a string)
-    protocol: [u8; 12],
-    /// The settings or action message, aligned to an 8 byte boundary
-    data: T,
-}
+    message_type: &[u8; 32],
+    inbuf: Tin,
+    outbuf: Tout) -> isize;
 ```
 
 `fd` is an open file descriptor.
 
-The `data` will vary. It can be binary or a text slice,
-and must be contiguous with the data structure ([u8; n], not String).
+The `data` will vary. It can be binary or a text slice.
+It will be read/written as a [u8; n] slice.
 It is recommended that a serialization format be used,
 e.g. `toml`, which will allow fields to be left blank.
-However, for well-defined protocols such as `termios`,
+However, for well-defined struct formats such as `termios`,
 it is reasonable to use existing data structure definitions.
 
+The `message_type` is a str in the form `"target/protocol_format[.V.v]\0"`
+It has a fixed size of 32 bytes and all unused bytes must be zero.
+
 The `target` describes who should interpret the set/get message.
-A proposed set of identifiers is below.
+A proposed set of `target` identifiers is below.
 - `fd` - the specfic resource that the `fd` represents.
-- `sm` - the scheme/daemon, for example enabling a feature
+- `scheme` - the scheme/daemon, for example enabling a feature
 or requesting if a capability exists.
-- `ke` - the kernel (used by the client), to change how this `fd` is handled,
+- `kernel` - the kernel (used by the client), to change how this `fd` is handled,
 such as responding with
 success for write operations immediately and not waiting
 for the scheme to complete, or requesting to intercept fpath
 operations.
-- `ks` - the kernel (used by a scheme), to change how this scheme is handled,
+- `kscheme` - the kernel (used by a scheme), to change how this scheme is handled,
 such as increasing the maximum number of pending messages to the scheme.
-- `re` - used internally by `relibc` to map to be processed before
+- `client` - used internally by `relibc` to map to be processed before
 making a system call.
-- `ns` - the namespace in which the file descriptor was opened,
+- `namespace` - the namespace in which the file descriptor was opened,
 purpose TBD.
+
+`protocol` is a short (e.g. one word) identifier of the kind of
+content of this message.
+The name should include or imply the class of resource (pseudo-terminal,
+graphics window, device type, etc.)
+Possible examples could be `"termios"`, "`window`", `"filelock"`, `"pcicfg"`, etc.
+
+`format` is a short identifier for the format of the data,
+normally one of `"data"` for binary data
+or `"ron"` for serialized data,
+although other formats may be used if needed.
+
+The version numbering `"V.v"` is an optional major/minor number pair
+to specify the version of the data definition used.
+It is not needed if there is only one data definition for
+the specified protocol.
+
+Note that the actual system call will include the size of
+`inbuf` and the allocated size of `outbuf`.
+
+Note that serialization/deserialization is the responsibility of
+the client and the target.
+`relibc` or `libredox` may provide an API that handles
+serialization/deserialization transparently,
+but that is outside the scope of this RFC.
 
 ## Scheme support
 
