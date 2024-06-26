@@ -295,6 +295,13 @@ manager has been suggested as a way for the kernel to only abstract _contexts_,
 and let that manager define _threads_, _processes_, _sessions_, and _process
 groups_.
 
+## `siginfo_t`
+
+POSIX, at least provided Redox will support XSI, requires extra information to
+be obtainable for each signal. This is highly likely possible to pass in an
+array per signal, using the pending bits as synchronization, but may require
+realtime signals to be queued internally in the kernel.
+
 ## Memory orderings
 
 Acquire-Release should be sufficient. TODO
