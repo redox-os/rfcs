@@ -7,9 +7,9 @@
 [summary]: #summary
 
 Most of Redox's POSIX signal handling implementation can be moved to userspace,
-in a way that in particular, allows changing the sigprocmask without any
+in a way that in particular, allows changing the signal mask without any
 syscalls. Sending signals would still be done by the kernel, with regular mutex
-synchronization, or later a userspace process manager.
+synchronization, or later, a userspace process manager.
 
 # Motivation
 [motivation]: #motivation
@@ -20,11 +20,11 @@ requires sigprocmask, which most POSIX systems implement in the kernel, using a
 sigprocmask syscall.
 
 However, as Redox is moving more and more of previous kernel functionality to
-relibc, it sometimes needs critical sections where signals cannot be delivered.
-This is currently the case for _open(3)_, where it would be useful not to need
-to wrap each open call in two sigprocmask syscalls. The same issue will become
-more significant in the future, should relibc for example emulate POSIX file
-descriptors.
+relibc, it sometimes needs critical sections where signals must not be
+delivered. This is currently the case for _open(3)_, where it would be useful
+not to need to wrap each open call in two sigprocmask syscalls. The same issue
+will become more significant in the future, should relibc for example emulate
+POSIX file descriptors.
 
 Moving the signal implementation to userspace will eliminate the need for the
 `sigprocmask`, `sigaction`, and `sigreturn` syscalls. The relibc counterparts
@@ -36,8 +36,8 @@ will also likely be faster. Although, there will still need to exist a
 
 ## Proc scheme API
 
-The kernel would change `/<proc>/sigstack` to `/<proc>/sighandler`, which would
-provide write-only access to the following struct:
+The kernel would remove `/<proc>/sigstack` and change `/<proc>/sighandler`,
+which would provide write-only access to the following struct:
 
 ```rust
 #[repr(C)]
@@ -61,29 +61,31 @@ region is defined as follows:
 ```rust
 #[repr(C)]
 struct SigCtlRegion {
+    // Consists of two words, one for standard and one for realtime signals.
+    // The low 32 bits are the pending set, whereas the high bits are the allowset.
     ctl: [AtomicU64; 2],
-    local_ctl: SigatomicU64, // "reentrant-atomic"
 
-    // TODO: on x86, it would be sufficient to only save rIP and rFLAGS
-    // (since pushf/popf are slow), and on aarch64, pc and a single register should
-    // similarly be sufficient for reading tpidr_el0.
+    local_ctl: SigatomicU64, // accessed using Relaxed and compiler barriers
 
-    old_ip: usize,      // eip/rip/pc 
-    old_sp: usize,      // esp/rsp/sp
-    old_reg_a: usize,   // eax/rax/x0
-    old_reg_b: usize,   // edx/rdx/x1
-    old_flags: usize,   // eflags/rflags/0
-    q: [RtSig; 32],
-    qhead: AtomicU8,
-    qtail: AtomicU8,
+    old_ip: usize,              // eip/rip/pc
+    old_archdep_reg: usize,     // eflags/rflags/x0
 }
 
 const LOCAL_CTL_INHIBIT_DELIVERY_BIT: u64 = 1;
 
 #[repr(C)]
 struct ProcCtlRegion {
-    allowset: AtomicU64,
-    // TODO: ignmask?
+    pending: AtomicU64,
+    actions: [RawAction; 64],
+    q: [RtSig; 32],
+    qhead: AtomicU8,
+    qtail: AtomicU8,
+}
+
+#[repr(C)]
+struct RawAction {
+    first: AtomicU64,
+    user_data: AtomicU64,
 }
 
 #[repr(C)]
@@ -99,12 +101,9 @@ reuse the existing TCB page. The ctl field consists of two _signal groups_,
 namely the standard and realtime signals (starting at 33). Each such
 `AtomicU64` is divided into a lower _pending set_ and upper _allowset_ half.
 
-Since signal 0 does not exist, this bitset is zero-based. The allowset bits are
-not necessarily the same as the inverted sigprocmask, but instead also includes
-ignored signals, via _sigaction(3)_. Libc will track manually which signals are
-ignored, which is necessary when deciding if newly unblocked signals after
-`sigprocmask` should be delivered. The `sigprocmask` and `pthread_sigmask`
-functions, as defined by POSIX, can only modify the current thread's mask.
+Since signal 0 does not exist, this bitset is zero-based. The `sigprocmask` and
+`pthread_sigmask` functions, as defined by POSIX, can only modify the current
+thread's mask.
 
 ## Kernel implementation of kill/sigqueue
 
