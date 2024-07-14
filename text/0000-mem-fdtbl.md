@@ -33,7 +33,7 @@ space.
 # Detailed design
 [design]: #detailed-design
 
-Each context on Redox, currently has a file table, containing file descriptors,
+Each context on Redox currently has a file table containing file descriptors,
 which themselves contain counted references to _file descriptions_.
 Hereinafter, _capabilities_ and _file descriptors_ are synonymous. This RFC
 only affects how descriptors are handled; descriptions are currently internal
@@ -44,24 +44,30 @@ whereas the _unforgeable token_ is the file descriptor.
 Another grant `Provider` type will be added for capability memory. Initialized
 pages will be marked present but only accessible by the kernel, and will thus
 indicate that it is a capability page. Userspace is responsible for allocating
-these grants, using `/scheme/memory/capspace`. The kernel currently assumes a
-page is userspace iff it is higher-half, but weakening this to "higher half
-implies kernel" is almost certainly feasible.
+these grants, using `/scheme/memory/capspace`. The kernel should still ideally
+be able to distinguish between capability memory and regular memory, in order
+to avoid page table walks, on applicable architectures.
 
-The contents of these pages, will be an array of pointers to the file
-descriptions (currently `Arc`s, but it would be equally valid for this to be
-physical pointers to entries on scheme-specific file description slabs).
-Although both of these optimizations would be invisible to userspace, both swap
-and CoW logic will initially be disabled in the kernel. The latter is easier to
-implement however, as it only affects writes to the capability arrays (when
-duplicating or opening file descriptors).
+Hence, the address space will initially need to be divided into regular and
+capability memory, split at an offset of, say, 1 GiB below the top of the user
+address space. On architectures that do not force kernel and user mappings to
+reside in different page tables (i.e. non-AArch64), it capability pages could
+possibly be stored in the kernel half.
 
-On x86, and in general any architecture supporting SMAP semantics (including
-RISC V), this pointer can be read in an exception-catching function or
-instruction sequence with EFLAGS.AC cleared, since these pages (unless kernel
-pages in the user half are introduced for other purposes) are capability pages
-if and only if they are kernel pages. On architectures that do not support
-this, manual page table walking is equally possible, and capability pages can
+The contents of these pages will be an array of pointers to the file
+descriptions. These are currently `Arc`s, but it would be equally valid for
+this to be physical pointers to entries on scheme-specific file description
+slabs, and this is out of scope for this RFC. Although both of these
+optimizations would be invisible to userspace, both swap and CoW logic will
+initially be disabled in the kernel. The latter is easier to implement however,
+as it only affects writes to the capability arrays (when duplicating or opening
+file descriptors).
+
+Provided the user address space is split, so that capability and regular
+virtual memory is fully disjoint, capabilities can be read directly from
+memory, using the existing `copy_from_user` mechanism. Unless the capability
+pages are intended to be readable by userspace, on some architectures like
+AArch64, manual page table walking is still possible, and capability pages can
 simply be marked "ignored" to the CPU, usually offering sufficient bits for it
 to still store the relevant pointer.
 
@@ -69,10 +75,11 @@ to still store the relevant pointer.
 
 All syscalls currently taking `fd: usize`, will instead take `cap: *const
 usize`, pointing to capability memory. Using non-capability memory will result
-in `EBADF`. Syscalls that can currently return file descriptors, namely
-`SYS_OPEN`, `SYS_DUP`, will instead take an additional argument
-`destination_cap: *mut usize`. This also includes schemes attempting to receive
-files sent to them using `SYS_SENDFD`.
+in `EBADF`. Analogously, using capability memory where regular memory is
+required, such as the buffer for `SYS_READ`, will fail with `EFAULT`. Syscalls
+that can currently return file descriptors, namely `SYS_OPEN`, `SYS_DUP`, will
+instead take an additional argument `destination_cap: *mut usize`. This also
+includes schemes attempting to receive files sent to them using `SYS_SENDFD`.
 
 ## POSIX
 
@@ -87,7 +94,8 @@ Non-legacy software will thus avoid the locking cost of creating new file
 descriptors, namely the requirement for the lowest-numbered file descriptor to
 always be selected. Relibc can for example use other pages for internal file
 descriptors, such as (future) capabilities for the current root namespace
-(dirfd), working directory (dirfd), or process/thread fds.
+(dirfd), working directory (dirfd), or process/thread fds, where it would be
+beneficial to avoid polluting the POSIX fd space.
 
 ### Fork and exec
 
@@ -107,13 +115,11 @@ automatically by the kernel (possibly limited when TLB shootdown is necessary).
 # Drawbacks
 [drawbacks]: #drawbacks
 
-This increases the complexity of the virtual memory system, because on some
-architectures, some non-present pages will need to be specially treated.
-Additionally, looking up the file description references from those tables,
-will likely require page table traversal on at least some architectures, even
-though capabilities will not require nearly as much memory as the rest of the
-address space, so they can likely be limited to smaller page directories (or
-other levels).
+This increases the complexity of the virtual memory system, in part due to the
+differences in virtual memory features, depending on architecture. In
+particular, some architectures may require manual page table traversal (or some
+other data structure), which is likely slower than accessing file descriptor
+table elements directly.
 
 # Alternatives
 [alternatives]: #alternatives
@@ -137,15 +143,14 @@ useful for scheme operations involving supplementary groups and file access
 control lists. Otherwise, such checks would need to enter kernel mode, which
 would be slower.
 
-Allowing user access can either be done directly to the pages, or
-alternatively, by using two contiguous pages per capability frame, one readable
-by userspace and one by the kernel. In that case, userspace-readable addresses
-can be unique identifiers rather than the same physical addresses to the file
-descriptions, in situations where physical memory should not be revealed to
-userspace. However, for use cases like CRIU, a possibly implementation might
-use restartable sequences during the short critical sections when the
-capability physical pointers need to be read, which would be interrupted if the
-physical memory is swapped.
+For use cases like CRIU, a possible implementation might use restartable
+sequences during the short critical sections when the capability physical
+pointers need to be read, which would be interrupted if e.g. the physical
+memory is swapped. In that sense, those physical addresses are the same type of
+volatile state as e.g. the CPU ID currently running a thread, or the x86 TSC.
+The kernel can thus still disable userspace access to those pages, in this case
+even at page table granularity, the same way the `rdpid` value can be zeroed,
+or x86's CR4.TSD can be set.
 
 Cyclic references will need to be avoided, since there exist file descriptors
 representing address spaces, which will themselves may contain file
@@ -156,3 +161,11 @@ reduced. It would be possible to track the `Provider` of nonpresent pages using
 the remaining page table entry bits, and using the PageInfo for present pages.
 The only exception is file-backed mmaps. Maybe those could also be represented
 using file descriptors?
+
+In this proposal, it is not allowed to use capability memory and regular memory
+interchangably, for some types of syscall arguments like the `SYS_READ` buffer.
+Nevertheless, this would potentially be a very powerful abstraction especially
+for IPC, where existing syscalls can be reused to send and receive capabilities
+in bulk. If a fused write-then-read syscall is introduced, this could replace
+SYS_OPEN (or "SYS_OPENAT") and SYS_DUP by specifying both a memory and
+capability buffer.
