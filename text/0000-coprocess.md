@@ -30,8 +30,9 @@ A result of this is that multiple programs, assuming they are position-independe
 # Detailed design
 [design]: #detailed-design
 
-Henceforth, we continue to use the term _process_ for referring to kernel scheduling units with a fixed address space.
-Using this definition, a process is a set of coprocesses.
+Henceforth, we continue to use the term _process_ for referring to a set of kernel scheduling units with a fixed address space.
+Using this definition, a _process_ consists of a set of coprocesses.
+A _simple process_ is a process containing only one coprocess.
 
 The memory-related syscalls will be extended to allow assigning protection key at page granularity, using the same range-based syscalls.
 Protection key 0, called the master key, will be reserved for redox-rt, where PKRU == ALL := 0xffff_ffff.
@@ -55,8 +56,8 @@ This is however probably a change the size of a research project, and will certa
 
 The fact that PKRU is a bitset, will allow for flexible intra-process memory sharing.
 For example, if redoxfs and nvmed reside in the same process, they can allocate IO buffers with a key available in both coprocesses.
-Additionally, a tracer may be granted read-only access to the traced process.
-This would however require the traced process to uphold the same guarantees, which might not be true in most practical cases.
+Additionally, a tracer may be granted read-only access to the traced coprocess.
+This would however require the traced coprocess to uphold the same guarantees, which might not be true in most practical cases.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -67,7 +68,7 @@ The obvious drawback is that this adds complexity, and it should be possible to 
 # Alternatives
 [alternatives]: #alternatives
 
-The alternative would be to stick to the currect process = same address space model.
+The alternative would be to stick to the currect "process = same address space" model.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
@@ -77,6 +78,11 @@ Generally speaking, WRPKRU will be serializing, so v1 should be implicitly mitig
 However, there are µ-architectures where instructions can sometimes execute even if they are not _architectural_, i.e. the CPU can sometimes make guesses about which instructions it will run, which may not necessarily always be correct.
 V2 might require RSB filling depending on hardware.
 This question can be generalized into other types of side channel, cf. [1].
+
+So far, this RFC has (implicitly) only discussed non-SMP systems, but the PKRU register is separate for each hardware thread.
+Thus, there are multiple possible ways to extend this to SMP.
+For example, the tags assigned to coprocesses could be allocated symmetrically, where each coprocesses could consist of multiple threads, as would be expected for simple processes.
+Alternatively, if all coprocesses are singlethreaded, it would be possible to assign one CPU-tag pair to each coprocess, increasing the set size.
 
 # References
 
