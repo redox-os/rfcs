@@ -70,6 +70,8 @@ The obvious drawback is that this adds complexity, and it should be possible to 
 
 The alternative would be to stick to the currect "process = same address space" model.
 
+Process-context identifiers would improve indirect latency by reducing TLB stalls after address space switches, but empirically it appears PCIDs does not directly affect the time it takes to switch page tables itself.
+
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
@@ -83,6 +85,10 @@ So far, this RFC has (implicitly) only discussed non-SMP systems, but the PKRU r
 Thus, there are multiple possible ways to extend this to SMP.
 For example, the tags assigned to coprocesses could be allocated symmetrically, where each coprocesses could consist of multiple threads, as would be expected for simple processes.
 Alternatively, if all coprocesses are singlethreaded, it would be possible to assign one CPU-tag pair to each coprocess, increasing the set size.
+
+Some kernels, including Linux, supports _core scheduling_ where sibling hyperthreads never run in different address spaces.
+This can have performance advantages due to the internal cache and queues often shared between hyperthreads.
+If keys are assigned nonsymmetrically to hardware threads, this should be taken into account.
 
 # References
 
