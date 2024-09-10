@@ -1,6 +1,6 @@
 - Feature Name: coprocess
 - Start Date: 2024-09-10
-- RFC PR: (leave this empty)
+- RFC PR: https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/23
 - Redox Issue: (leave this empty)
 
 # Summary
