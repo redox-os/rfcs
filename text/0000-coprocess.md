@@ -90,6 +90,9 @@ Some kernels, including Linux, supports _core scheduling_ where sibling hyperthr
 This can have performance advantages due to the internal cache and queues often shared between hyperthreads.
 If keys are assigned nonsymmetrically to hardware threads, this should be taken into account.
 
+There is a similar less commonly available Kernel Memory Protection Key feature, using the IA32_PKRS MSR.
+This could similarly allow e.g. lightweight kernel modules, to for example allow dymamically loading schedulers, or other parts of the kernel where it would make sense to dynamically replace implementations.
+
 # References
 
 Shapiro, Jonathan S (2003). Vulnerabilities in Synchronous IPC Designs, _IEEE Symposium on Security and Privacy_. https://srl.cs.jhu.edu/courses/600.439/shap03vulnerabilities.pdf
