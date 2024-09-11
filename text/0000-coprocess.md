@@ -11,6 +11,19 @@ Coprocesses will on x86 be based on using User Protection Keys, theoretically al
 Crucially, this will impose requirements on the coprocesses, namely that they are position-independent executables, and that program code is not allowed to use any instruction that can modify the active protection key.
 Hence, any program loading code will need airtight checking, potentially by guarding executable mmap rights behind capabilities.
 
+# Prior art
+
+Intel added the PKU feature for a reason, and although relatively recent, various possible configurations have been explored in academia [1-3].
+The performance results are overwhelmingly positive, for example [2]
+
+> Cross-domain switches are 16–116x faster than regular process context switches
+
+or [3]
+
+> Notably, the unikernel with our isolation exhibits only 0.6% slowdown on a set of macro-benchmarks.
+
+The closest existing system appears to be [2], which uses the a modified protection key hardware implementation for isolating possibly untrusted components in a process.
+
 # Motivation
 [motivation]: #motivation
 
@@ -83,7 +96,7 @@ Generally speaking, WRPKRU will be serializing, so v1 should be implicitly mitig
 However, there are µ-architectures where instructions can sometimes execute even if they are not _architectural_, i.e. the CPU can sometimes make guesses about which instructions it will run, which may not necessarily always be correct.
 This does however seem unlikely, as WRPKRU is serializing, and any Meltdown-immune CPU will not even be able to fetch cache lines from different protection keys until _after_ the WRPKRU.
 V2 might require RSB filling or IBPB depending on hardware.
-This question can possibly be generalized into other types of side channel, cf. [1].
+This question can possibly be generalized into other types of side channels, cf. [4].
 
 So far, this RFC has (implicitly) only discussed non-SMP systems, but the PKRU register is separate for each hardware thread.
 Thus, there are multiple possible ways to extend this to SMP.
@@ -99,4 +112,10 @@ This could similarly allow e.g. lightweight kernel modules, to for example allow
 
 # References
 
-Shapiro, Jonathan S (2003). Vulnerabilities in Synchronous IPC Designs, _IEEE Symposium on Security and Privacy_. https://srl.cs.jhu.edu/courses/600.439/shap03vulnerabilities.pdf
+1. Vahldiek-Oberwagner A, et al. (2019). ERIM: Secure, Efficient In-process Isolation with Protection Keys (MPK), _Proceedings of the 28th USENIX Security Symposium_. https://www.usenix.org/conference/usenixsecurity19/presentation/vahldiek-oberwagner
+
+2. Schrammel D, et al. (2020). Secure, Efficient In-process Isolation with Protection Keys (MPK), _Proceedings of the 29th USENIX Security Symposium._ https://www.usenix.org/conference/usenixsecurity20/presentation/schrammel
+
+3. Sung M (2020). Intra-unikernel isolation with Intel memory protection keys, _Proceedings of the 16th ACM SIGPLAN/SIGOPS International Conference on Virtual Execution Environment_. https://doi.org/10.1145/3381052.3381326
+
+4. Shapiro J S (2003). Vulnerabilities in Synchronous IPC Designs, _IEEE Symposium on Security and Privacy_. https://srl.cs.jhu.edu/courses/600.439/shap03vulnerabilities.pdf
