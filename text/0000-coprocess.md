@@ -75,11 +75,15 @@ Process-context identifiers would improve indirect latency by reducing TLB stall
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-Additionally, it is not entirely clear how this will be affected by Spectre.
+This may need to be analyzed in terms of CPU side channel resistance.
+It [appears that](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/related-intel-security-features-technologies.html) protection keys are equivalently protected on Intel CPUs compared to user/kernel or different-PCID pages.
+In other words, any Meltdown-immune CPU will, according to this advisory, similarly be immune to Meltdown.
+
 Generally speaking, WRPKRU will be serializing, so v1 should be implicitly mitigated.
 However, there are µ-architectures where instructions can sometimes execute even if they are not _architectural_, i.e. the CPU can sometimes make guesses about which instructions it will run, which may not necessarily always be correct.
-V2 might require RSB filling depending on hardware.
-This question can be generalized into other types of side channel, cf. [1].
+This does however seem unlikely, as WRPKRU is serializing, and any Meltdown-immune CPU will not even be able to fetch cache lines from different protection keys until _after_ the WRPKRU.
+V2 might require RSB filling or IBPB depending on hardware.
+This question can possibly be generalized into other types of side channel, cf. [1].
 
 So far, this RFC has (implicitly) only discussed non-SMP systems, but the PKRU register is separate for each hardware thread.
 Thus, there are multiple possible ways to extend this to SMP.
