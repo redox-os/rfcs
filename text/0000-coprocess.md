@@ -7,7 +7,7 @@
 [summary]: #summary
 
 This RFC suggests defining the _coprocess_ concept, between that of threads and processes in terms of isolation, allowing significantly faster context switching that can bypass the kernel.
-Coprocesses will on x86 be based on using User Protection Keys, theoretically allowing up to 32 coprocesses in the same process set.
+Coprocesses will on x86 be based on using User Protection Keys, theoretically allowing up to 16 coprocesses in the same process set.
 Crucially, this will impose requirements on the coprocesses, namely that they are position-independent executables, and that program code is not allowed to use any instruction that can modify the active protection key.
 Hence, any program loading code will need airtight checking, potentially by guarding executable mmap rights behind capabilities.
 
@@ -24,7 +24,7 @@ The maximum achievable context switch (one-way) latency last time this was check
 This latency will obviously stack the more switches are required to complete any given request.
 Thus, it would be useful if similar processes could be combined into groups of coprocesses.
 
-Modern x86 cpus introduce a feature called user protection keys, allowing 32 possible tags that can be assigned to individual pages, where userspace can modify the "accessible" and "writable" bits for each indivdual tag, using the RDPKRU and WRPKRU instructions.
+Modern x86 cpus introduce a feature called user protection keys, allowing 16 possible tags that can be assigned to individual pages, where userspace can modify the "accessible" and "writable" bits for each indivdual tag, using the RDPKRU and WRPKRU instructions.
 A result of this is that multiple programs, assuming they are position-independent, can be embedded into the same address space, where these can be switched to by modifying the PKRU.
 
 # Detailed design
