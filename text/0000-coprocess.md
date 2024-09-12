@@ -69,11 +69,6 @@ Operations like execv will thus need to occur via redox-rt, which internally nee
 Redox-rt will obviously need to be dynamically linked for this to work.
 Additionally, all coprocesses will need to be PIEs, as they will be embedded in the same address space.
 
-TODO: How will scheduling work?
-The kernel always tracks the current context, which will somehow need to be set as part of the intra-process switch.
-Even if this requires entering the kernel, this would avoid the page table switch cost, so it would still be an overall improvement.
-It could be possible to store the pointer to the current context somewhere in the address space (where the page containing this pointer would be master-tagged), if this does not incur any unnecessary performance cost in the kernel.
-
 If alternatively the kernel design is restructured so there can only be one context per address space and hardware thread, it would be possible to implement intra-process scheduling in redox-rt.
 This is however probably a change the size of a research project, and will certainly need deep tradeoff analysis.
 
@@ -113,6 +108,11 @@ These two optimizations are orthogonal though, and indeed the TLB can be represe
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
+TODO: How will scheduling work?
+The kernel always tracks the current context, which will somehow need to be set as part of the intra-process switch.
+Even if this requires entering the kernel, this would avoid the page table switch cost, so it would still be an overall improvement.
+It could be possible to store the pointer to the current context somewhere in the address space (where the page containing this pointer would be master-tagged), if this does not incur any unnecessary performance cost in the kernel.
+
 This may need to be analyzed in terms of CPU side channel resistance.
 It [appears that](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/related-intel-security-features-technologies.html) protection keys are equivalently protected on Intel CPUs compared to user/kernel or different-PCID pages.
 In other words, any Meltdown-immune CPU will, according to this advisory, similarly be immune to Meltdown.
@@ -127,6 +127,10 @@ So far, this RFC has (implicitly) only discussed non-SMP systems, but the PKRU r
 Thus, there are multiple possible ways to extend this to SMP.
 For example, the tags assigned to coprocesses could be allocated symmetrically, where each coprocesses could consist of multiple threads, as would be expected for simple processes.
 Alternatively, if all coprocesses are singlethreaded, it would be possible to assign one CPU-tag pair to each coprocess, increasing the set size.
+
+Initially it would be far simpler if coprocess sets were allocated statically, either predefined or by inheriting the coprocess set after fork/execv until the number of PKEYs are exhausted. Allocating those dynamically would also be an option, perhaps by statically partitioning the address space (43 or 52 bits on x86) by dividing the 512-entry PML4/PML5 array into 32 PML4s/PML5s per coprocess.
+This would allow coprocesses to jump between coprocess sets, possibly dynamically.
+Unfortunately, this would vastly increase the complexity of the TLB shootdown logic, even though it would be possible to lazily allow an old coprocess to remain mapped even after it has moved.
 
 Some kernels, including Linux, supports _core scheduling_ where sibling hyperthreads never run in different address spaces.
 This can have performance advantages due to the internal cache and queues often shared between hyperthreads.
