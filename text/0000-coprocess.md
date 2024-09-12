@@ -51,7 +51,12 @@ A _simple process_ is a process containing only one coprocess.
 The memory-related syscalls will be extended to allow assigning protection key at page granularity, using the same range-based syscalls.
 Protection key 0, called the master key, will be reserved for redox-rt, where PKRU == ALL := 0xffff_ffff.
 Redox-rt runs in _master mode_ when PKRU == ALL, and unlike the coprocesses, is allowed to contain code that sets the PKRU.
+A _master page_ is a page for which the PKEY=0.
 Key 0 will be used for intra-process context switching, and will always be access-disabled inside any coprocess.
+
+Redox-rt will thus be possible to call from any coprocess. It will need to implement access checks when context switches are requested.
+It will also need to shadow the current PKRU inside a master page, so it can check directly after the PKRU instruction if the switch was allowed or not.
+This is because any coprocess can jump to the PKRU instruction.
 
 Any memory syscall that adds new execute permission, will need to be forbidden outside PKRU == ALL.
 This can either be checked explicitly by the kernel by reading PKRU, or if [virtual memory capabilities](https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/22), by assigning a user protection key to capability arrays as well.
@@ -86,6 +91,10 @@ Coprocesses would on ther other hand have their own key-associated address subsp
 Additionally, if that code results in any attempt at accessing data not pertaining to the caller's address substace, such as global variables, it would immediately result in a segmentation fault handled by redox-rt.
 Such a fault handler may cross-check the page protection key of the instruction address, with the current PKRU, and detect an intentional or unintentional attempt at executing another coprocess' text.
 Hence, although other coprocess' text may be leaked, there is likely no significant significant security issue with this, assuming .text secrecy is not part of the threat model.
+
+A more significant issue with this however, is that coprocesses can arbitrarily jump to code inside redox-rt, including the WRPKRU instruction itself.
+Thus, redox-rt in master mode will need to shadow the current PKRU in a master page only it can access, and implement checks at the required places to detect if this happens.
+As a side-channel countermeasure (it will have entered another coprocess's address subspace!), this must always result in the termination of the caller.
 
 As for reliability, the possibility of executing other coprocess' text can presumably be limited by separating and/or randomizing programs' locations.
 Since there are only 16 possible keys, the amount of remaining address space (4-level: 8 TiB, or 5-level: 4 EiB) is still huge.
