@@ -23,6 +23,7 @@ or [3]
 > Notably, the unikernel with our isolation exhibits only 0.6% slowdown on a set of macro-benchmarks.
 
 The closest existing system appears to be [2], which uses the a modified protection key hardware implementation for isolating possibly untrusted components in a process.
+This idea does however appear to be mostly unexplored in a µkernel setting, on conventional hardware.
 
 # Motivation
 [motivation]: #motivation
@@ -54,6 +55,7 @@ Key 0 will be used for intra-process context switching, and will always be acces
 
 Any memory syscall that adds new execute permission, will need to be forbidden outside PKRU == ALL.
 This can either be checked explicitly by the kernel by reading PKRU, or if [virtual memory capabilities](https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/22), by assigning a user protection key to capability arrays as well.
+Protection keys for usermode pages similarly apply in the kernel, so this is possible.
 Operations like execv will thus need to occur via redox-rt, which internally needs to switch to master mode.
 
 Redox-rt will obviously need to be dynamically linked for this to work.
@@ -77,6 +79,16 @@ This would however require the traced coprocess to uphold the same guarantees, w
 
 The obvious drawback is that this adds complexity, and it should be possible to achieve reasonable performance even without the coprocess concept.
 
+The coprocess concept is not generalizable to arbitrary programs.
+It imposes several restrictions on programs, such as position independence and the absence of unverified program loading
+Furthermore, protection keys control only data accesses, not instruction fetches.
+Coprocesses would on ther other hand have their own key-associated address subspace, making any instruction page effectively execute-only.
+Additionally, if that code results in any attempt at accessing data not pertaining to the caller's address substace, such as global variables, it would immediately result in a segmentation fault handled by redox-rt.
+Such a fault handler may cross-check the page protection key of the instruction address, with the current PKRU, and detect an intentional or unintentional attempt at executing another coprocess' text.
+Hence, although other coprocess' text may be leaked, there is likely no significant significant security issue with this, assuming .text secrecy is not part of the threat model.
+
+As for reliability, the possibility of executing other coprocess' text can presumably be limited by separating and/or randomizing programs' locations.
+Since there are only 16 possible keys, the amount of remaining address space (4-level: 8 TiB, or 5-level: 4 EiB) is still huge.
 
 # Alternatives
 [alternatives]: #alternatives
@@ -84,6 +96,7 @@ The obvious drawback is that this adds complexity, and it should be possible to 
 The alternative would be to stick to the currect "process = same address space" model.
 
 Process-context identifiers would improve indirect latency by reducing TLB stalls after address space switches, but empirically it appears PCIDs does not directly affect the time it takes to switch page tables itself.
+These two optimizations are orthogonal though, and indeed the TLB can be represented as an M×N matrix of address subspaces, with M PCIDs and N PKEYs.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
