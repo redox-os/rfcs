@@ -68,7 +68,7 @@ It will also need to shadow the current PKRU inside a master page, so it can che
 This is because any coprocess can jump to the PKRU instruction.
 
 Any memory syscall that adds new execute permission, will need to be forbidden outside PKRU == ALL.
-This can either be checked explicitly by the kernel by reading PKRU, or if [virtual memory capabilities](https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/22), by assigning a user protection key to capability arrays as well.
+This can either be checked explicitly by the kernel by reading PKRU, or if/when [virtual memory capabilities](https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/22) is implemented, by assigning a user protection key to capability arrays as well.
 Protection keys for usermode pages similarly apply in the kernel, even if it is not yet decided if virtual memory capabilities will reside in user or kernel memory.
 In the latter case, it is obviously not possible for userspace to set IA32_PKRS, so it would need to somehow store that information elsewhere.
 It could for example store the protection key as a pointer tag in each internal file descriptor pointer, or possibly a full bitset, or alternatively at capability page granularity.
