@@ -7,7 +7,7 @@
 [summary]: #summary
 
 This RFC suggests defining the _coprocess_ concept, between that of threads and processes in terms of isolation, allowing significantly faster context switching that can bypass the kernel.
-Coprocesses will on x86 be based on using User Protection Keys, theoretically allowing up to 16 coprocesses in the same process set.
+Coprocesses will on x86 be based on using User Protection Keys, theoretically allowing up to 16 coprocesses in the same set.
 Crucially, this will impose requirements on the coprocesses, namely that they are position-independent executables, and that program code is not allowed to use any instruction that can modify the active protection key.
 Hence, any program loading code will need airtight checking, potentially by guarding executable mmap rights behind capabilities.
 
@@ -44,12 +44,16 @@ A result of this is that multiple programs, assuming they are position-independe
 # Detailed design
 [design]: #detailed-design
 
-Henceforth, we continue to use the term _process_ for referring to a set of kernel scheduling units with a fixed address space.
-Using this definition, a _process_ consists of a set of coprocesses.
-A _simple process_ is a process containing only one coprocess.
+Hereinafter, we generalize the traditional _process_ concept using terms _clique_ and _coprocess_, for referring to a set of kernel scheduling units (normally threads) sharing hardware address space (equivalent to the same top-level address space, since the Redox kernel does not yet support intermediate page table sharing).
+Namely, a _clique_ consists of a set of _coprocesses_, where each _coprocess_ lives in the same hardware address space as the others, except being assigned to a separate protection key.
+From its own perspective, such a _coprocess_ will view itself as a regular _process_.
+A _process_ is therefore still a set of _threads_, and different processes cannot access each others' memory unless explicitly granted.
+A _trivial clique_ is a clique containing only one coprocess.
+Trivial cliques correspond to the regular model where processes are mapped 1:1 to hardware address spaces.
+For each clique, there will also exist pages for runtime code in redox-rt, which is not considered part of any coprocess.
 
-The memory-related syscalls will be extended to allow assigning protection key at page granularity, using the same range-based syscalls.
-Protection key 0, called the master key, will be reserved for redox-rt, where PKRU == ALL := 0xffff_ffff.
+The memory-related syscalls will be extended to allow assigning protection keys at page granularity, using the same range-based syscalls currently present.
+Protection key 0, called the _master key_, will be reserved for redox-rt, accessible only when PKRU == ALL := 0xffff_ffff.
 Redox-rt runs in _master mode_ when PKRU == ALL, and unlike the coprocesses, is allowed to contain code that sets the PKRU.
 A _master page_ is a page for which the PKEY=0.
 Key 0 will be used for intra-process context switching, and will always be access-disabled inside any coprocess.
@@ -66,11 +70,20 @@ It could for example store the protection key as a pointer tag in each internal 
 Another perhaps better option would be to statically partition the capability address space by protection key, in which case the kernel can simply compare the pkey bits of the capability address, with the current PKRU register.
 Operations like execv will thus need to occur via redox-rt, which internally needs to switch to master mode.
 
-Redox-rt will obviously need to be dynamically linked for this to work.
+Redox-rt will obviously need to be dynamically linked for this to work, assuming it is not already the interpreter.
 Additionally, all coprocesses will need to be PIEs, as they will be embedded in the same address space.
+
+TODO: How will scheduling work?
+The kernel always tracks the current context, which will somehow need to be set as part of the intra-process switch.
+This could possibly be achieved by letting the kernel inspect the capability pointer to the current thread, which at the moment exists within each TCB.
+That page would however need to be master-key-tagged for security reasons (just availability AFAICT?).
+
+Even if switching context would require entering the kernel, it would avoid the page table switch cost, so it would still likely be an overall improvement.
+However, simply entering and leaving the kernel is still a major bottleneck, in part due to the required privilege checks.
 
 If alternatively the kernel design is restructured so there can only be one context per address space and hardware thread, it would be possible to implement intra-process scheduling in redox-rt.
 This is however probably a change the size of a research project, and will certainly need deep tradeoff analysis.
+Some OSes tried M:N scheduling two decades ago, where it seemed exceptionally hard to implement correctly and performantly for POSIX userspace.
 
 The fact that PKRU is a bitset, will allow for flexible intra-process memory sharing.
 For example, if redoxfs and nvmed reside in the same process, they can allocate IO buffers with a key available in both coprocesses.
@@ -108,11 +121,6 @@ These two optimizations are orthogonal though, and indeed the TLB can be represe
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-TODO: How will scheduling work?
-The kernel always tracks the current context, which will somehow need to be set as part of the intra-process switch.
-Even if this requires entering the kernel, this would avoid the page table switch cost, so it would still be an overall improvement.
-It could be possible to store the pointer to the current context somewhere in the address space (where the page containing this pointer would be master-tagged), if this does not incur any unnecessary performance cost in the kernel.
-
 This may need to be analyzed in terms of CPU side channel resistance.
 It [appears that](https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/related-intel-security-features-technologies.html) protection keys are equivalently protected on Intel CPUs compared to user/kernel or different-PCID pages.
 In other words, any Meltdown-immune CPU will, according to this advisory, similarly be immune to Meltdown.
@@ -128,8 +136,9 @@ Thus, there are multiple possible ways to extend this to SMP.
 For example, the tags assigned to coprocesses could be allocated symmetrically, where each coprocesses could consist of multiple threads, as would be expected for simple processes.
 Alternatively, if all coprocesses are singlethreaded, it would be possible to assign one CPU-tag pair to each coprocess, increasing the set size.
 
-Initially it would be far simpler if coprocess sets were allocated statically, either predefined or by inheriting the coprocess set after fork/execv until the number of PKEYs are exhausted. Allocating those dynamically would also be an option, perhaps by statically partitioning the address space (43 or 52 bits on x86) by dividing the 512-entry PML4/PML5 array into 32 PML4s/PML5s per coprocess.
-This would allow coprocesses to jump between coprocess sets, possibly dynamically.
+Initially it would be far simpler if cliques were allocated statically, either predefined or by remaining in the clique after fork/execv until the number of PKEYs are exhausted.
+Allocating those dynamically would also be an option, perhaps by statically partitioning the address space (43 or 52 bits on x86) by dividing the 512-entry PML4/PML5 array into 32 PML4s/PML5s per coprocess.
+This would allow coprocesses to jump between cliques, possibly dynamically.
 Unfortunately, this would vastly increase the complexity of the TLB shootdown logic, even though it would be possible to lazily allow an old coprocess to remain mapped even after it has moved.
 
 Some kernels, including Linux, supports _core scheduling_ where sibling hyperthreads never run in different address spaces.
