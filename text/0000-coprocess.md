@@ -91,7 +91,8 @@ This is however probably a change the size of a research project, and will certa
 Some OSes tried M:N scheduling two decades ago, where it seemed exceptionally hard to implement correctly and performantly for POSIX userspace.
 
 The fact that PKRU is a bitset, will allow for flexible intra-process memory sharing.
-For example, if redoxfs and nvmed reside in the same process, they can allocate IO buffers with a key available in both coprocesses.
+For example, if redoxfs and nvmed reside in the same clique, they can allocate IO buffers with a key available in both coprocesses.
+Doing so would be a tradeoff between the number of available protection keys, and TLB usage if the buffer instead were to be mapped into both coprocesses' address subspaces.
 Additionally, a tracer may be granted read-only access to the traced coprocess.
 This would however require the traced coprocess to uphold the same guarantees, which might not be true in most practical cases.
 
