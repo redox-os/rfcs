@@ -116,7 +116,9 @@ On x86 this is even worse, since bytes _within_ instructions are also valid jump
 Unfortunately, this means programs' text must not contain the byte sequence 0F01EF, such as the number 983535 in any intermediate, unless it can be proven any such jump will terminate with a crash.
 This appears to statistically not be the case for most daemons, but may complicate a design that assigns coprocesses to cliques at runtime.
 AArch64 does not have this issue since all instructions need to be 4-aligned.
-Compilers might be able to use a special provably correct instruction sequences for indirect jumps, in which case it can be proven they will never be able to adversarially jump to any 0f01ef sequence within another coprocess.
+
+On x86, compilers might be able to use a special provably correct instruction sequences for indirect jumps, in which case it can be proven they will never be able to adversarially jump to any 0F01EF sequence within another coprocess.
+The same could be done for calls, and RETs would likely be protectable similarly if CET shadow stacks are enabled.
 
 As for reliability, the possibility of executing other coprocess' text can presumably be limited by separating and/or randomizing programs' locations.
 Since there are only 16 possible keys, the amount of remaining address space (4-level: 8 TiB, or 5-level: 4 EiB) is still huge.
