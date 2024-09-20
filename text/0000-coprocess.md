@@ -96,7 +96,7 @@ This would however require the traced coprocess to uphold the same guarantees, w
 The obvious drawback is that this adds complexity, and it should be possible to achieve reasonable performance even without the coprocess concept.
 
 The coprocess concept is not generalizable to arbitrary programs.
-It imposes several restrictions on programs, such as position independence and the absence of unverified program loading
+It imposes several restrictions on programs, such as position independence and the absence of unverified program loading.
 Furthermore, protection keys control only data accesses, not instruction fetches.
 Coprocesses would on ther other hand have their own key-associated address subspace, making any instruction page effectively execute-only.
 Additionally, if that code results in any attempt at accessing data not pertaining to the caller's address substace, such as global variables, it would immediately result in a segmentation fault handled by redox-rt.
