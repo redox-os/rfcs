@@ -22,7 +22,12 @@ or [3]
 
 > Notably, the unikernel with our isolation exhibits only 0.6% slowdown on a set of macro-benchmarks.
 
-The closest existing system appears to be [2], which uses the a modified protection key hardware implementation for isolating possibly untrusted components in a process.
+The RustyHermit unikernel supports memory protection keys, which was in fact the OS that Sung et al. implemented this system for [3].
+This has many advantages for the purposes RustyHermit is adapted for, namely to mostly depend on an external hypervisor for isolating applications.
+Running in kernel mode however, this requires Supervisor-Mode Protection Keys (PKS), which is not as commonly available as PKU, the latter being available for example on Zen3+.
+It is also fundamentally limited to the maximum number of keys, assuming RustyHermit will not diverge into a regular kernel with support for user-mode isolation, or use virtualization.
+
+The closest existing system compared to this RFC appears to be [2], which uses the a modified protection key hardware implementation for isolating possibly untrusted components in a process.
 This idea does however appear to be mostly unexplored in a µkernel setting, on conventional hardware.
 
 # Motivation
