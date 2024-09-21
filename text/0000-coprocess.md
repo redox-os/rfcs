@@ -142,6 +142,9 @@ The alternative would be to stick to the currect "process = same address space" 
 Process-context identifiers would improve indirect latency by reducing TLB stalls after address space switches, but empirically it appears PCIDs does not directly affect the time it takes to switch page tables itself.
 These two optimizations are orthogonal though, and indeed the TLB can be represented as an M×N matrix of address subspaces, with M PCIDs and N PKEYs.
 
+On capability architectures like CHERI, capabilities may possibly be used as a faster alternative or complement to the TLB, similar to what is suggested in this RFC.
+That still obviously requires such hardware, and with tradeoffs that may or may not be applicable to all use cases.
+
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
