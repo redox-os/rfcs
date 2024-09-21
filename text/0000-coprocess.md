@@ -109,16 +109,27 @@ Additionally, if that code results in any attempt at accessing data not pertaini
 Such a fault handler may cross-check the page protection key of the instruction address, with the current PKRU, and detect an intentional or unintentional attempt at executing another coprocess' text.
 Hence, although other coprocess' text may be leaked, there is likely no significant significant security issue with this, assuming .text secrecy is not part of the threat model.
 
-A more significant issue with this however, is that coprocesses can arbitrarily jump to code inside redox-rt, including the WRPKRU instruction itself.
+Although Aarch64's Permission Overlay Extension appears to support enforcing any combination of RWX permissions, building this on top of x86 PKEYs will introduce a fair bit of additional complexity, unless Control-Flow Enforcement Technology (CET) is available.
+Most critically, coprocesses can arbitrarily jump to code inside redox-rt, including the WRPKRU instruction itself.
 Thus, redox-rt in master mode will need to shadow the current PKRU in a master page only it can access, and implement checks at the required places to detect if this happens.
 As a side-channel countermeasure (it will have entered another coprocess's address subspace!), this must always result in the termination of the caller.
-On x86 this is even worse, since bytes _within_ instructions are also valid jump targets.
-Unfortunately, this means programs' text must not contain the byte sequence 0F01EF, such as the number 983535 in any intermediate, unless it can be proven any such jump will terminate with a crash.
-This appears to statistically not be the case for most daemons, but may complicate a design that assigns coprocesses to cliques at runtime.
-AArch64 does not have this issue since all instructions need to be 4-aligned.
+Worse, bytes _within_ instructions are also valid jump targets, so enforcing coprocesses' text sections are valid would likely require scanning for the sequence 0F01EF.
+The follows from the fact that the `RET` instruction makes it almost impossible to prevent such indirect jumps in the first place.
+For example, the gadget `MOV EAX, 0x000F01EF; RET` (e.g. a function that returns 983535) would allow an adversarial coprocess to merely set ECX=EDX=0 and EAX=0xffff_ffff, and then simply call the address pointing to the 0F byte of the immediate value, to trivially unlock all other coprocesses' address subspaces including the master subspace.
+Most daemons statistically appear to not contain the sequence 0F01EF in their text at all, but this would certainly complicate a design that dynamically assigns coprocesses to cliques at runtime, as such program properties would be highly unreliable.
+AArch64 does not have this issue both because all instructions need to be 4-aligned, and because POE appears to support disabling execute access.
 
-On x86, compilers might be able to use a special provably correct instruction sequences for indirect jumps, in which case it can be proven they will never be able to adversarially jump to any 0F01EF sequence within another coprocess.
-The same could be done for calls, and RETs would likely be protectable similarly if CET shadow stacks are enabled.
+Luckily, x86 CET ensures the target of any indirect branch must start with `ENDBR64`, and the CPU even guarantees it will not speculate beyond that instruction until the CPU has truly executed the ENDBR64.
+Direct jumps and calls are harmless, since the coprocesses can be spatially partitioned so their text is always at least 4 GiB apart.
+Any indirect call or jump target not beginning with `ENDBR64`, will result in a Control Protection CPU exception, which when handled could unconditinally result in a crash of the suspected adversarial coprocess.
+CET would similarly protect against `RET` by using shadow stacks.
+User shadow stack memory is never accessible by userspace, and can only be populated with addresses from existing control-flow instructions, so it cannot be overriden with custom addresses.
+
+CET may have a (very?) minor performance overhead, e.g. unavoidably from requiring increased cache/memory usage from storing a shadow stack.
+That said, many Linux distributions enable it by default, as it has several advantages both for protecting against speculative leaks and unsafe memory exploits.
+This applies to most Rust programs as well, which will often contain insufficiently rigorous unsafe code (depending on definition).
+If a program is "provably" safe, which most Rust code realistically is a long way from, then CET is not intrinsically necessary, as such a program would never jump to indirect addresses outside its own address space (and even if the IBT is trained à la Spectre v2, speculation stops at WRPKRU).
+If so, PKRU can be used for isolating memory addresses between domains to prevent speculative leaks, but checks preventing malicious PKRU escape may be omitted.
 
 As for reliability, the possibility of executing other coprocess' text can presumably be limited by separating and/or randomizing programs' locations.
 Since there are only 16 possible keys, the amount of remaining address space (4-level: 8 TiB, or 5-level: 4 EiB) is still huge.
