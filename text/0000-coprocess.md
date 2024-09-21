@@ -114,7 +114,7 @@ Most critically, coprocesses can arbitrarily jump to code inside redox-rt, inclu
 Thus, redox-rt in master mode will need to shadow the current PKRU in a master page only it can access, and implement checks at the required places to detect if this happens.
 As a side-channel countermeasure (it will have entered another coprocess's address subspace!), this must always result in the termination of the caller.
 Worse, bytes _within_ instructions are also valid jump targets, so enforcing coprocesses' text sections are valid would likely require scanning for the sequence 0F01EF.
-The follows from the fact that the `RET` instruction makes it almost impossible to prevent such indirect jumps in the first place.
+This follows from the fact that the `RET` instruction makes it almost impossible to prevent such indirect jumps in the first place.
 For example, the gadget `MOV EAX, 0x000F01EF; RET` (e.g. a function that returns 983535) would allow an adversarial coprocess to merely set ECX=EDX=0 and EAX=0xffff_ffff, and then simply call the address pointing to the 0F byte of the immediate value, to trivially unlock all other coprocesses' address subspaces including the master subspace.
 Most daemons statistically appear to not contain the sequence 0F01EF in their text at all, but this would certainly complicate a design that dynamically assigns coprocesses to cliques at runtime, as such program properties would be highly unreliable.
 AArch64 does not have this issue both because all instructions need to be 4-aligned, and because POE appears to support disabling execute access.
