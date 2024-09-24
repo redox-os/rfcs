@@ -71,6 +71,34 @@ Exec will close all O_CLOEXEC capabilities before entering the new program.
 This does not change the O_CLOFORK/O_CLOEXEC fragmentation issue, since the kept file descriptor numbers must be preserved in the new context.
 If all capabilities in a page are freed, that page can safely be unmapped, possibly automatically by the kernel (possibly limited when TLB shootdown is necessary).
 
+## Architecture specific
+
+This section assumes userspace will not be granted read-only access to the actual capability pointers, i.e. the capability pages will reside in kernel-only virtual memory.
+
+### x86-64 and i686
+
+On x86-64, the capability region will reside in a kernel PML4 reserved for capabilities.
+All capability pages in this PML4 will be marked non-global and kernel-only, and will be switched as any other page during address space switches.
+Reading a capability pointer will mask away all PML4-controlling bits, and hardcode the reserved PML4 index, resulting in address `x`.
+When user protection keys are supported, it will AND the remaining address with a branchless value set to zero iff the 4 MSBs of `x` correspond to a set access/write bit in the `PKRU` register.
+If the PKEY-derived mask is zero, the kernel will access page zero, which assuming SMAP is enabled, will always fail.
+If SMAP is not available, it will need to check the address manually.
+
+Similarly, on i686 a kernel PD will be reserved, allowing 10+12-2=20 possible capabilities (>1 million) per context.
+This may be somewhat limiting, but on Linux systems this limit is by default just a few thousand, and exhausting this limit means 1/1024 of available physical memory (or 1/4096 if PSE is enabled), which is likely unrealistic.
+Protection keys are obviously ignored in this case.
+
+### RISC-V
+
+RISC-V does not currently support protection keys without nonstandard extensions.
+As it supports user and kernel mappings in the same page tables, it will function similar to x86-64 in the case where PKEYs are not available.
+
+### aarch64
+
+Unlike x86, AArch64 separates user and kernel page tables.
+Storing capabilities directly in mapped kernel memory would thus necessitate switching kernel page tables in addition to switching user page tables, for every world switch.
+Instead, part of the user page table will be reserved, and contain page table entries marked non-present, but where they will act as a regular radix tree walked manually by the kernel.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -82,6 +110,12 @@ In particular, some architectures may require manual page table traversal (or so
 
 One alternative to allow _invisible_ internal relibc fds, is to simply use two file tables, or use another level of indirection for the POSIX file table.
 Compared to the suggested approach, those would however be less efficient, and would suffer from increased complexity, in managing resource limits, and process API impls.
+
+A viable alternative would be to keep the file table structure as is (or perhaps use a radix tree), and simply use an indirect file table.
+Such an approach would both add additional layers of indirection, even more so if a generic radix tree is used rather than a global table.
+This is thus a tradeoff between TLB and cache usage.
+In the best case, translating between file descriptor and description will require only one (say 4 KiB or 2 MiB) TLB entry, whereas a tree walk would affect multiple regular cache lines.
+Nevertheless, making these conclusions about performance is likely premature though, as benchmarks are necessary.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
