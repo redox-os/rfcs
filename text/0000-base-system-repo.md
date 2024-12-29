@@ -11,7 +11,7 @@ Merge the repos forming the base system into a single repo.
 # Motivation
 [motivation]: #motivation
 
-While we will likely be able to stabilize the userspace ABI relatively soon through dynamic linking of relibc and libredox, the syscall interface as well as the interface of system services between each other and with relibc is likely to take much longer to stabilize if it ever gets stabilized. Many internal improvements currently require merge requests across multiple repos that need to be merged at the same time which makes such changes harder to do. For this reason some repos contain programs that don't actually quite fit in the repo but are only there because it makes changes easier. For example the driver repo contains inputd, fbbootlogd and fbcond, none of which are actually drivers, but all of them are somewhat coupled with the graphics drivers. Merging all programs in the base system into a single repo will make it easier to make atomic changes. It is also currently not safe for users to update individual packages that are part of the base system.
+While we will likely be able to stabilize the userspace ABI relatively soon through dynamic linking of relibc and libredox, the syscall interface as well as the interface of system services between each other and with relibc is likely to take much longer to stabilize if it ever gets stabilized. Many internal improvements currently require merge requests across multiple repos that need to be merged at the same time which makes such changes harder to do. For this reason some repos contain programs that don't actually quite fit in the repo but are only there because it makes changes easier. For example the driver repo contains inputd, fbbootlogd and fbcond, none of which are actually drivers, but all of them are somewhat coupled with the graphics drivers. And having crates like redox-scheme and redox-log be included through crates.io due to being in a separate repo makes changes to them harder too. Merging all programs in the base system into a single repo will make it easier to make atomic changes. It is also currently not safe for users to update individual packages that are part of the base system.
 
 # Detailed design
 [design]: #detailed-design
@@ -26,6 +26,7 @@ The following repos will be merged into a single "base" repo:
 * contain
 * drivers
 * escalated
+* event
 * init
 * initfs
 * ipcd
@@ -34,6 +35,8 @@ The following repos will be merged into a single "base" repo:
 * ptyd
 * ramfs
 * randd
+* redox-log
+* redox-scheme
 * zerod
 
 The following repos will **not** be merged into the "base" repo:
@@ -45,6 +48,7 @@ The following repos will **not** be merged into the "base" repo:
 * findutils
 * installer
 * ion
+* libredox (this is supposed to be a stable API in the future)
 * pkgar
 * pkgutils
 * redoxerd
@@ -76,7 +80,8 @@ Should the following repos be merged into the "base" repo? I think they should, 
 * kernel
 * relibc
 * redoxfs
-* orbital
+* syscall
+* orbital (but not the gui apps themself)
 
 ---
 
