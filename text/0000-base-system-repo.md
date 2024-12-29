@@ -53,6 +53,10 @@ The following repos will **not** be merged into the "base" repo:
 
 For the actual merge, I propose to make for each repo a commit which moves the entire content to a subdirectory and then git merge all the repos together into a new repo. This preserves the full history of all repos as well as git blame. And afterwards all issues will have to be transfered to the new repo.
 
+After merging the repos, initially all recipes can be updated to use the `source.same_as` functionality that drivers-initfs already uses to have a single checkout for the base repo across all recipes and then build the respective subdirectory of the base repo. Once that is done, other MRs can start getting merged again as usual.
+
+At a later point we can start merging recipes for base system components together and adapt the build step as appropriate. This will also enable sharing compiled dependencies between components if we put them in the same cargo workspace. In the end we probably want to either end up with either a single base package or a base package and a base-desktop package where the latter would contain the audio and graphics subsystem. Or alternatively we could end up with a base-server and base-desktop package which contain all components that overlap between both configurations to ensure the base system is atomically updated.
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -73,3 +77,7 @@ Should the following repos be merged into the "base" repo? I think they should, 
 * relibc
 * redoxfs
 * orbital
+
+---
+
+Should we split the base package and if so should we split it into base and base-desktop or base-server and base-desktop?
