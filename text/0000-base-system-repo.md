@@ -25,7 +25,6 @@ The following repos will be merged into a single "base" repo:
 * audiod
 * contain
 * drivers
-* escalated
 * event
 * init
 * initfs
@@ -77,11 +76,14 @@ What other designs have been considered? What is the impact of not doing this?
 Should the following repos be merged into the "base" repo? I think they should, but it might be less disruptive to keep them in separate repos at least for the time being.
 
 * bootstrap
+* escalated
 * kernel
 * relibc
 * redoxfs
 * syscall
 * orbital (but not the gui apps themself)
+
+@4lDO2 prefers putting those in submodules instead for another repo.
 
 ---
 
