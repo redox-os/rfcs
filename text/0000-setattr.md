@@ -7,10 +7,10 @@
 [summary]: #summary
 
 For many different kinds of named resources
-(files, pseudo-devices, file systems, etc.)
+(files, pseudo-devices, file systems, etc.),
 there are reasons to set or get certain attributes.
 The setattr/getattr functionality is intended to provide
-a consistent protocol for all resources for communicating settings
+a consistent mechanism for all resources for communicating settings
 and performing actions that are not part of the normal
 open/read/write operations.
 
@@ -30,9 +30,6 @@ might have both standard and specialized settings and attributes
 special interaction between the device and the kernel
 - an intermediary scheme like `contain` may want to intercept certain file operations like fpath,
 and may need to register to do so.
-- ioctl is the UNIX general purpose mechanism for setting device and pseudo-device parameters
-- fcntl is used to set a variety of flags for files
-- user-level open calls may include flags that change the behavior of files or resources
 - there may be situations where the interaction between the scheme and the kernel needs to be modified,
 e.g. short-circuit writes (the kernel reports success
 to the client without waiting for the scheme to complete the operation)
@@ -41,8 +38,29 @@ UNIX and Linux have several mechanisms that have evolved to handle
 communication of settings,
 but there is no uniformity in how they are defined,
 and there are many system calls to support them.
+- ioctl is the UNIX general purpose mechanism for setting device and pseudo-device parameters
+- fcntl is used to set a variety of flags for files
+- setxattr/getxattr are used to change "extended attribute" `name:value` pairs for files and directories
+- shmctl is used to set parameters for shared memory
+
+A significant problem with the `ioctl` system call is that both setting and getting
+of device state is handled by a single system call.
+This makes it difficult to partition capabilities and permissions between
+read-only operations and write operations (or operations that have side effects).
+
+`getattr` provides a read-only operation,
+which is intended to have no material side effects,
+other than perhaps updating a counter or something similar.
+`setattr` provides a mechanism that can support setting of device attributes,
+reading that may cause change of state,
+or atomic set-and-read.
+Note that the device driver or system service must implement the functionality
+according to this intent,
+but having the mechanism at least allows the possibility to separate
+"set" permissions from "get" permissions.
 
 The proposal is to unify all these mechanisms under two system calls.
+Then, when required, `ioctl`/`fcntl`/`xattr`/`shmctl` APIs can be constructed using `setattr`/`getattr`.
 
 # Detailed design
 [design]: #detailed-design
@@ -88,7 +106,7 @@ fn setattr<Tin, Tout>(
 The public libredox API signatures are:
 
 ```
-/// Return Ok(usize), the size of the out_buf content on success,
+/// Return Ok(usize), the size of the out_buf content in bytes on success,
 /// Err(error::Error) on failure
 fn getattr<Tout>(
     fd: usize,
@@ -96,7 +114,7 @@ fn getattr<Tout>(
     out_buf: &mut TOut
 ) -> Result<usize>;
 
-/// Return Ok(usize), the size of the out_buf content on success, possibly zero,
+/// Return Ok(usize), the size of the out_buf content in bytes on success, possibly zero,
 /// Err(error::Error) on failure
 fn setattr<Tin, Tout>(
     fd: usize, 
@@ -124,13 +142,14 @@ it is reasonable to use existing data structure definitions.
 
 The `request` is a byte str in the form `b"TargetActionVersion"`
 It has a fixed size of 16 bytes.
-Unused bytes should be filled with 0 or whitespace.
+Unused bytes should be filled with 0 or whitespace,
+but must match the value expected by the driver or service.
 `Target` is a prefix used as a uniqueness qualifier,
 similar to the way different IOCTL numbers have a prefix
 related to the device they apply to.
 `Action` is the set of attributes to get or set,
 or the action being requested,
-such as seek on a physical device.
+such as resetting a physical device.
 It also implies a particular format for the message,
 for example, a message in RON format will have a
 different `Action` identifier than a message in
@@ -156,7 +175,7 @@ If `out_buf` is None or its size is 0, no data will be returned.
 `setattr` and `getattr` will normally be interruptable,
 such as by `SIGALRM` or `SIGINT`,
 although this may not be the case for the first implementation.
-On interrupt, the return value will be `-EINTR` or Err().
+On interrupt, the return value will be `-EINTR` or `Err(EINTR)`.
 
 The serialization/deserialization, including format, is the responsibility of
 the client and the target.
@@ -239,18 +258,16 @@ This would help with a refined permission structure
 for capability-based security as well.
 
     a. There are potentially multiple sets of attributes to
-    set/get per resource.
-    Using a different path for each attribute set would allow a
-    `read` or `write` of attributes to be very simple,
-    as with the current `termios` implementation.
-    However, implementing a non-blocking `read` would be
-    require some further analysis.
+set/get per resource.
+Using a different path for each attribute set would allow a
+`read` or `write` of attributes to be very simple,
+as with the current `termios` implementation.
 
     b. Using a single path to identify all attributes for the resource would
-    require a two-step process when getting attributes,
-    first to write a message indicating what attributes are desired,
-    then reading them back when they are ready.
-    This could easily support non-blocking `read` of attributes.
+require a two-step process when getting attributes,
+first to write a message indicating what attributes are desired,
+then reading them back when they are ready.
+However, this could easily support non-blocking `read` of attributes.
 
 3. To provide a non-blocking paradigm,
 we could add another system call, `readattr`.
@@ -264,3 +281,4 @@ and `readattr` would read the response when ready.
 
 1. Is it reasonable for our `systemd` alternative to use
 threads to encapsulate `getattr` calls so they can be interrupted?
+What happens to threads that hang when the driver fails to respond?
