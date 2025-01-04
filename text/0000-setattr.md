@@ -34,7 +34,8 @@ and may need to register to do so.
 - fcntl is used to set a variety of flags for files
 - user-level open calls may include flags that change the behavior of files or resources
 - there may be situations where the interaction between the scheme and the kernel needs to be modified,
-e.g. short-circuit writes (the kernel reports success to the client before informing the scheme of the operation)
+e.g. short-circuit writes (the kernel reports success
+to the client without waiting for the scheme to complete the operation)
 
 UNIX and Linux have several mechanisms that have evolved to handle
 communication of settings,
@@ -50,34 +51,34 @@ The proposal is to unify all these mechanisms under two system calls.
 
 Two system calls are proposed, `setattr` and `getattr`.
 
-- `getattr` sends a message to query the state of settings.
-`getattr` should not cause any significant side effects,
-allowing `getattr` to be read-only-safe.
-A result is provided
-through a mutable buffer argument.
-- `setattr` sends a message with settings to be applied,
-or an action to be invoked.
+- `getattr` queries the state of settings for a resource.
+`getattr` should not cause any significant side effects.
+This is intended to encourage the separation of privileges into
+read-only vs. potentially behavior-modifying operations.
+A result is provided through a mutable buffer argument.
+- `setattr` attempts to apply settings for a resource,
+or requests an action to be performed.
 `setattr` can return data through a mutable buffer.
 
 The (non-public) system call signatures are
 ```
-/// Return 0 on success,
+/// Return the size of the out_buf content on success,
 /// -errno on failure
-fn setattr<T>(
+fn getattr<Tout>(
+    fd: usize,
+    request: &[u8; 16],
+    out_buf: &mut TOut,
+    out_size: usize
+) -> isize;
+
+/// Return the size of the out_buf content, possibly zero, on success,
+/// -errno on failure
+fn setattr<Tin, Tout>(
     fd: usize, 
     request: &[u8, 16],
     in_buf: &TIn,
     in_size: usize,
     out_buf: Option<&mut TOut>,
-    out_size: usize
-) -> isize;
-
-/// Return the size of the out_buf content on success,
-/// -errno on failure
-fn getattr<Tin, Tout>(
-    fd: usize,
-    request: &[u8; 16],
-    out_buf: &mut TOut,
     out_size: usize
 ) -> isize;
 ```
@@ -87,21 +88,21 @@ fn getattr<Tin, Tout>(
 The public libredox API signatures are:
 
 ```
-/// Return 0 on success,
-/// -errno on failure
-fn setattr<T>(
+/// Return Ok(usize), the size of the out_buf content on success,
+/// Err(error::Error) on failure
+fn getattr<Tout>(
+    fd: usize,
+    request: &[u8; 16],
+    out_buf: &mut TOut
+) -> Result<usize>;
+
+/// Return Ok(usize), the size of the out_buf content on success, possibly zero,
+/// Err(error::Error) on failure
+fn setattr<Tin, Tout>(
     fd: usize, 
     request: &[u8, 16],
     in_buf: &TIn,
     out_buf: Option<&mut TOut>
-) -> Result<usize>;
-
-/// Return the size of the out_buf content on success,
-/// -errno on failure
-fn getattr<Tin, Tout>(
-    fd: usize,
-    request: &[u8; 16],
-    out_buf: &mut TOut
 ) -> Result<usize>;
 ```
 
@@ -134,31 +135,33 @@ It also implies a particular format for the message,
 for example, a message in RON format will have a
 different `Action` identifier than a message in
 binary format.
-
-`Version` is a numeric version number,
+`Version` is typically a numeric version number,
 allowing message formats to be refined or expanded
 over time.
 
-For `setattr`, if an `out_buf` is provided,
-then on return,
+For `setattr`, if an `out_buf` is provided, then on return,
 it will typically contain the previous value,
 prior to the new value being set,
 and the copying of the previous value and
-setting of the new value will typically have been done atomically.
+setting of the new value will typically have been done atomically,
+to the extent feasible.
 Not all schemes and actions will support this behavior,
-so it should be documented for each scheme and action.
-A return value of 0 indicates that no data was copied
-to `out_buf`.
-If `out_buf` is None or `out_size` is 0, no data will be returned.
+so it should be documented for each scheme and action
+whether out_buf will contain a value,
+and to what degree the value is atomically changed
+from the reported value.
+A return value of 0 indicates that no data was copied to `out_buf`.
+If `out_buf` is None or its size is 0, no data will be returned.
 
-`setattr` and `getattr` must be interruptable,
-such as by `SIGALRM` or `SIGINT`.
-On interrupt, the return value will be `-EINTR`.
+`setattr` and `getattr` will normally be interruptable,
+such as by `SIGALRM` or `SIGINT`,
+although this may not be the case for the first implementation.
+On interrupt, the return value will be `-EINTR` or Err().
 
-Note that serialization/deserialization is the responsibility of
+The serialization/deserialization, including format, is the responsibility of
 the client and the target.
 `relibc` or `libredox` may provide an API that handles
-serialization/deserialization transparently,
+serialization/deserialization transparently for certain interfaces,
 but that is outside the scope of this RFC.
 
 ## Scheme support
@@ -169,7 +172,7 @@ of `setattr` and `getattr` that returns EOPNOTSUPP.
 
 Assuming the file descriptor will be obtained by
 `openat` or through named `dup` (as "termios" is today),
-the scheme daemon must implement a handler for the
+the scheme provider must implement a handler for the
 path used for `setattr`/`getattr`,
 either as its own handler or as part of the
 regular handler.
@@ -189,20 +192,20 @@ through relibc.
 ## ioctl/termios
 
 This mechanism is intended as an alternative to `ioctl` and `termios`.
-If desired, ioctl/termios messages can be supported, indicating the
+If desired, ioctl/termios format messages can be supported, indicating the
 IOCTL message type as the `action`.
 
 The implementation of `ioctl` and `termios` functions in `relibc`
 can be updated to the new mechanism,
-when the appropriate schemes are implemented.
+when the appropriate scheme support is implemented.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 - These system calls will be used by our `systemd` equivalent
 to monitor and control daemons.
-Therefore they must not block indefinitely if a daemon fails to respond.
-The current solution assumes `getattr` and `setattr` can be run in a thread
+Therefore they should not block indefinitely if a daemon fails to respond.
+The short-term solution assumes `getattr` and `setattr` can be run in a thread
 specifically for that purpose,
 and another thread can send a signal to interrupt a blocked `getattr` call
 if too much time elapses.
