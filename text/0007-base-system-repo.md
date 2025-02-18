@@ -16,10 +16,6 @@ While we will likely be able to stabilize the userspace ABI relatively soon thro
 # Detailed design
 [design]: #detailed-design
 
-This is the bulk of the RFC. Explain the design in enough detail for somebody familiar
-with the language to understand, and for somebody familiar with the compiler to implement.
-This should get into specifics and corner-cases, and include examples of how the feature is used.
-
 The following repos will be merged into a single "base" repo:
 
 * audiod
