@@ -15,12 +15,12 @@ Sending signals would still be done by the kernel, with regular mutex synchroniz
 Signals are the userspace equivalent of hardware interrupts -- they interrupt what was previously running, use the same stack, and are mostly maskable.
 POSIX requires sigprocmask, which most POSIX systems implement in the kernel, using a sigprocmask syscall.
 
-However, as Redox is moving more and more of previous kernel functionality to relibc, it sometimes needs critical sections where signals must not be delivered.
+However, as Redox is moving more and more of previous kernel functionality to redox-rt, it sometimes needs critical sections where signals must not be delivered.
 This is currently the case for _open(3)_, where it would be useful not to need to wrap each open call in two sigprocmask syscalls.
-The same issue will become more significant in the future, should relibc for example emulate POSIX file descriptors.
+The same issue will become more significant in the future, should redox-rt for example emulate POSIX file descriptors.
 
 Moving the signal implementation to userspace will eliminate the need for the `sigprocmask`, `sigaction`, and `sigreturn` syscalls.
-The relibc counterparts will also likely be faster.
+The redox-rt counterparts will also likely be faster, when no longer syscall-based.
 Although, there will still need to exist a `kill`/`sigqueue` syscall, or an equivalent IPC call to a process manager.
 
 # Detailed design
@@ -116,11 +116,7 @@ This flag allows async-signal-safe functions to easily and efficiently disabling
 The `user_handler` field, points to the _signal trampoline_.
 The kernel will save a few registers, some of which can be used as scratch registers.
 The trampoline will need to calculate the new stack pointer, taking into account the potential alternate signal stack (`sigaltstack`).
-On x86_64 this looks like
-
-TODO: see sigentry in
-https://gitlab.redox-os.org/4lDO2/relibc/-/blob/usignal/redox-rt/src/arch/x86_64.rs?ref_type=heads
-until the asm is mature.
+On x86_64 this can be found [here](https://gitlab.redox-os.org/redox-os/relibc/-/blob/44f148ad6c214551bb0fddf0eecc9801558f25b9/redox-rt/src/arch/x86_64.rs#L174).
 
 ## Fork, exec, pthread_create
 
@@ -141,10 +137,8 @@ If they are unset, they can be ignored or handled, and masked, like the other si
 The SIGCONT signal cannot be ignored either, in the sense that sending a SIGCONT will always continue the target process, but userspace can choose whether or not it will be caught.
 The pending and masked bits for SIGCONT will thus have the same behavior as regular signals, except `kill` will unconditionally transition the thread from _stopped_ to _blocked_ first.
 
-POSIX requires the generation of SIGCONT to discard all pending stop signals,
-and vice versa.
-Since the `kill` implementation is mutex-synchronized, this
-should (TODO?) be relatively easy to synchronize.
+POSIX requires the generation of SIGCONT to discard all pending stop signals, and vice versa.
+Since the `kill` implementation is mutex-synchronized, this should be relatively easy to synchronize.
 
 ## Realtime signals
 
@@ -178,19 +172,18 @@ Specifically, swapping only the allowset is done using `word.fetch_add(new_allow
 
 ## sigaction
 
-Sigaction will be implemented entirely in libc.
+Sigaction will be implemented entirely in redox-rt.
 With signals temporarily disabled in the `sigaction` function itself, it can use regular mutex-based synchronization, including synchronization between `sigaction` and the signal trampoline running on other threads.
 Setting the action to SIG_IGN will modify the ignmask and clear the allowset bit for the respective signal.
 Setting it to SIG_DFL will either modify the signal-is-stop bits for SIGTSTP/SIGTTIN/SIGTTOU, or set it to a builtin default handler.
 
-POSIX allows the sigaction to change between the generation and delivery of a signal, allowing sigaction to be weakly ordered and only synchronize against the signal trampoline.
-(TODO: is this interpretation correct?)
+POSIX allows the sigaction to change between the generation and delivery of a signal, allowing sigaction to be weakly ordered and only synchronize against the signal trampoline (see [mem-orderings][mem-orderings]).
 
 # sigwait, sigsuspend, etc
 
-POSIX does not differentiate between accepting (i.e. `sigwait`ing) and delivering (i.e. trampoline runs) (TODO: correct?).
+POSIX does not appear to differentiate between accepting (i.e. `sigwait`ing) and delivering (i.e. trampoline runs).
 Thus, it should be valid to implement these internally with a few additional checks in the trampoline.
-That said, these functions can probably avoid the trampoline entirely, by using the inhibit bit and simply catching `EINTR`.
+That said, these functions can avoid the trampoline entirely, by using the inhibit bit and simply catching `EINTR`, which is what the current implementation does.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -207,7 +200,7 @@ Since the sigaltstack logic is done in the trampolines, there's a large amount o
 
 The kernel already has a basic signal implementation in the kernel.
 It would be possible to extend this to include realtime signals, sigwait/sigsuspend, and implement all the sigaction flags.
-However, this will severely limit the ability for relibc to quickly protect critical sections in async-signal-safe functions.
+However, this will severely limit the ability for redox-rt to quickly protect critical sections in async-signal-safe functions.
 
 Alternatively, it would be possible to only implement the logic behind the _inhibit_ bit.
 That said, this breaks down if larger critical sections are used, that may internally block.
@@ -229,4 +222,6 @@ This is highly likely possible to pass in an array per signal, using the pending
 
 ## Memory orderings
 
-Acquire-Release should be sufficient. TODO
+[mem-orderings]: #mem-orderings
+
+Acquire+Release+Relaxed should be sufficient, but for now it is on a correctness basis assumed that the implementation uses SeqCst.
