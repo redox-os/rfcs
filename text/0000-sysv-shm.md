@@ -28,12 +28,12 @@ sysvshmd keeps housekeeping data and implements the core functionalities which a
 3. Manage segment permissions
 4. Manage segment lifecyles
 
-relibc exposes functions to application and aso mmap()s the segments to process memory space.
+relibc exposes functions to application and also mmap()s the segments to process memory space.
 
 
 Overview of the workflow is that a process should call `shmget()` to get a shm id. Then the process calls `shmat()` with that id to get the shared memory mapped to its memory space.
 
-One way to implement is to have a daemon track shms. So calling shmget open()s a control channel to our daemon shmat() dup()s another fd. Which can be mapped to process's memory by relibc. Other functions like shmctl() can be communicated by writing special commnds through the control channel.
+One way to implement is to have a daemon track shms. So calling shmget open()s a control channel to our daemon, and shmat() dup()s another fd, which can be mapped to process's memory by relibc. Other functions like shmctl() can be communicated by writing special commnds through the control channel.
 
 One point to consider is that in this design relibc MUST inform sysvshmd of some actions so the daemon can update its internal data structures. The ideal was to have the daemon handle all core functionalities.
 
