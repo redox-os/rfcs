@@ -31,7 +31,7 @@ sysvshmd keeps housekeeping data and implements the core functionalities which a
 relibc exposes functions to application and aso mmap()s the segments to process memory space.
 
 
-Overview of the workflow is that A process should call shmget() to get a shm id. Then the process calls shmat() with that id to get the shared memory mapped to its memory space.
+Overview of the workflow is that a process should call `shmget()` to get a shm id. Then the process calls `shmat()` with that id to get the shared memory mapped to its memory space.
 
 One way to implement is to have a daemon track shms. So calling shmget open()s a control channel to our daemon shmat() dup()s another fd. Which can be mapped to process's memory by relibc. Other functions like shmctl() can be communicated by writing special commnds through the control channel.
 
