@@ -92,14 +92,24 @@ Conceivably, Redox could use a status bit to indicate a path that represents a "
     - `/namespace` (treats namespace as a thing that is not a scheme)
     - `/scheme/ens` (`/scheme/rns` for "real namespace")
 
+The recommended name in this RFC, `/scheme/namespace`, will be the choice once this RFC is approved.
+
 2. We need a naming format for distinct namespaces, e.g. `/scheme/namespaces/n` for namespace `n`. It should be separated from the naming of the effective namespace.
 
     - Having names for distinct namespaces would allow us to have a capability-based security mechanism where schemes can be inserted or removed from namespaces. It would also enable user-managed namespaces and schemes. Details to be discussed in another RFC.
     
     - Using a name that is distinct from the normal namespace, e.g. `/scheme/namespaces` (plural), would allow us to have arbitrary names for new namespaces. If we choose `/scheme/namespace/scheme_name` for mounting a scheme, and `/scheme/namespace/n` to refer to namespace `n`, then we are forced to use numbers rather than names for namespaces, and we will have schemes under the namespace folder at two different levels, creating confusion.
 
+This is out of scope for this RFC.
+
 3. We need better management of namespaces, but it should be addressed in a separate RFC.
+
+This is out of scope for this RFC.
 
 4. Should we change for `open` to `mount` when creating a new scheme? It includes additional flags and options.
 
+This is out of scope for this RFC.
+
 5. Assume that when a scheme is restarted, it will call `open("/scheme/namespace/scheme_name", O_CREAT | O_EXCL)`. If those flags are not provided, then the open is to query the namespace about the state of the scheme. What actions can be performed on the resulting fd, and what information is provided?
+
+This is out of scope for this RFC.
