@@ -45,6 +45,8 @@ One point to consider is that in this design relibc MUST inform sysvshmd of some
 ### int shmget(key_t key, size_t size, int shmflg)
 Get the id of the new or already existing shared memory segment.
 
+If key is the value of IPC_PRIVATE it means the segment is not to be shared and IPC_CREAT is implied.
+
 A dictionary is used to keep the links between assigned shm ids and allocated segments `HashMap<u64, usize>`.
 The behavior of the function depends on the `shmflg` as follows:
 
@@ -95,13 +97,26 @@ process should be known from the fd to the daemon.
 
 `shmget` return '-1' on error and a shm id otherwise.
 
-TODO: Errors
-TODO: Limits, can be set in daemon config.
+#### Errors
+EACESS: Calling process does not have the required permission according to file permission bits.
+
+EEXIST: When both IPC_EXCL and IPC_CREAT are specified but the shm segment already exists.
+
+EINVAL: `size` is greater than the size of requested segment.
+
+ENOENT: No segment exists for the given key and IPC_CREAT was not specified.
+
+ENOMEM: No memory could be allocated for segment overhead.
+
+ENOSPC: No more ids available. Maximum number of ids have been assigned.
+
+#### Limits
+TODO: Can be set in daemon config.
 
 ### void* shmat(int shmid, cost void *shmaddr, int shmflg)
 Brings a shared memory segment into calling process address space.
 
-Returns the start address of the mapped memory
+Returns the start address of the mapped memory or '-1' if it fails which means `errno` should be read.
 
 If possible provided `shmaddr` will be used as the start address (depends on `ipcd` and `mmap`). 
 
@@ -126,9 +141,20 @@ SHM_REMAP: Replace current mappings in the address range (Applicable?)
 Detaches the shared memory segment located at the address specified by `shmaddr`. In other words
 reverses the actions of `shmat()`.
 
+Return '0' on success and '-1' on failure. In the latter case `errno` should be read to find the cause.
+
 A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `SysvShmIdDs`. 
 
-###
+### int shmctl(int shid, int op, struct shmid_ds *buf)
+
+Has these functions:
+- IPC_STAT, SHM_STAT, SHM_STAT_ANY: Get a copy of `SysvShmIdDs` in `buf`.
+- IPC_SET: Change some fields of `SysvShmIdDs`.
+- IPC_RMID: Mark the segment for destruction.
+- IPC_INFO, SHM_INFO: Get global shm limits
+
+#### Errors
+TODO
 
 ## Control Channel Protocol
 TODO
