@@ -6,11 +6,12 @@
 # Summary
 [summary]: #summary
 
-Implement SysV shm function family.
-- [shmget()](https://man7.org/linux/man-pages/man2/shmget.2.html)
-- [shmat()](https://man7.org/linux/man-pages/man2/shmat.2.html)
-- [shmdt()](https://man7.org/linux/man-pages/man2/shmdt.2.html)
-- [shmctl()](https://man7.org/linux/man-pages/man2/shmctl.2.html)
+Implement SysV [shm](https://pubs.opengroup.org/onlinepubs/9799919799/functions/V2_chap02.html#tag_16_07)
+function family.
+- [shmget()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmget.html)
+- [shmat()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmat.html)
+- [shmdt()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmdt.html)
+- [shmctl()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmctl.html)
 
 # Motivation
 [motivation]: #motivation
@@ -41,7 +42,7 @@ One way to implement is to have a daemon track shms. So calling shmget open()s a
 One point to consider is that in this design relibc MUST inform sysvshmd of some actions so the daemon can update its internal data structures. The ideal was to have the daemon handle all core functionalities.
 
 ## API
-### shmget(key_t key, size_t size, int shmflg)
+### int shmget(key_t key, size_t size, int shmflg)
 Get the id of the new or already existing shared memory segment.
 
 A dictionary is used to keep the links between assigned shm ids and allocated segments `HashMap<u64, usize>`.
@@ -51,11 +52,11 @@ IPC_CREAT: Create new segment. key argument is ignored.
 
 IPC_EXCL: Is valid only when combined with IPC_CREAT. If the key exists, call fails.
 
-SHM_HUGETLB: Ignored for now. Do we have huge pages concept in Redox?
+SHM_HUGETLB: Ignored.
 
 SHM_HUGE_2MB, SHM_HUGE_1GB: See SHM_HUGETLB.
 
-SHM_NORESERVE: TODO: Check if upstream `ipcd` has this option if so it is relayed, otherwise ignored.
+SHM_NORESERVE: Ignored.
 
 `shmflg` also contains Linux like file permissions ('rwxrwxrwx') to be set on the created segment.
 For every shared memory segment we have a structure as follows:
@@ -76,10 +77,8 @@ Here we need to know the pid of the creator. It would be best if we could get th
 the process which has opened the fd. Otherwise relibc should get and relay it which is breaking our
 promise to keep the daemon independent.
 
-Size of the segment should get rounded up to a multiple of page size. Where can we get the memory
-page size in Redox?
-
-Then we have:
+Size of the segment should get rounded up to a multiple of page size. Which is
+`syscall::PAGE_SIZE` for now. Then we have:
 ```rust
 pub struct SysvIpcPerm {
 	key: KeyT,
@@ -94,13 +93,15 @@ pub struct SysvIpcPerm {
 User and group ids plus permission are set according to the `shmflg`. So the uid and gid of the calling
 process should be known from the fd to the daemon.
 
-`shmget` return -1 on error and a shm id otherwise.
+`shmget` return '-1' on error and a shm id otherwise.
 
-TODO: Errors (In Redox a special method is called to know the error code?)
+TODO: Errors
 TODO: Limits, can be set in daemon config.
 
-### shmat(int shmid, cost void *shmaddr, int shmflg)
+### void* shmat(int shmid, cost void *shmaddr, int shmflg)
 Brings a shared memory segment into calling process address space.
+
+Returns the start address of the mapped memory
 
 If possible provided `shmaddr` will be used as the start address (depends on `ipcd` and `mmap`). 
 
@@ -121,13 +122,13 @@ process lacks proper access.
 
 SHM_REMAP: Replace current mappings in the address range (Applicable?)
 
-### shmdt(cost void *shmaddr)
+### int shmdt(cost void *shmaddr)
 Detaches the shared memory segment located at the address specified by `shmaddr`. In other words
 reverses the actions of `shmat()`.
 
 A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `SysvShmIdDs`. 
 
-
+###
 
 ## Control Channel Protocol
 TODO
@@ -136,8 +137,8 @@ TODO
 [drawbacks]: #drawbacks
 
 There is no technical drawback just that we are reimplementing an obsolete interface as 
-SysV interface is superseded by POSIX ipc/shm mechanisms. Therefore newer software should
-not rely on it.
+SysV interface is superseded by POSIX ipc/shm [mechanisms](https://pubs.opengroup.org/onlinepubs/007908799/xsh/shm_open.html).
+Therefore newer software should not rely on it. Although it may still be useful.
 
 # Alternatives
 [alternatives]: #alternatives
