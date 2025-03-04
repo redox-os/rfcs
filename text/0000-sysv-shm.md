@@ -89,7 +89,7 @@ pub struct SysvIpcPerm {
 	gid: u32,
 	cuid: u32,
 	cgid: u32,
-	shm: File // Return value of open("shm://")
+	shm: File // Return value of open("/scheme/shm/")
 }
 ```
 User and group ids plus permission are set according to the `shmflg`. So the uid and gid of the calling
