@@ -21,14 +21,15 @@ Enables building of the projects that depend on it (like PostgreSQL).
 # Detailed design
 [design]: #detailed-design
 ## Overview
+This is an extension to ipcd to keep and return so housekeeping data for the memory segments
+it allocates and assigns.
 
-(ipcd)<->(sysvshmd)<->(relibc)<->(application)
+(ipcd)<->(relibc)<->(application)
 
-sysvshmd keeps housekeeping data and implements the core functionalities which are:
+shm keeps housekeeping data and implements the core functionalities which are:
 1. Create a mapping between shm keys and reserved memory segments and manage them
-2. Get shared memory segments from `ipcd`
-3. Manage segment permissions
-4. Manage segments life cycle
+2. Manage segment permissions
+3. Manage segments life cycle
 
 relibc exposes functions to application and also mmap()s the segments to process memory space.
 
@@ -37,9 +38,6 @@ General workflow is as follows:
 - The process calls `shmat()` with that id to get the shared memory mapped to its memory space.
 - A call to 
 
-One way to implement is to have a daemon track shms. So calling shmget open()s a control channel to our daemon, and shmat() dup()s another fd, which can be mapped to process's memory by relibc. Other functions like shmctl() can be communicated by writing special commands through the control channel.
-
-One point to consider is that in this design relibc MUST inform sysvshmd of some actions so the daemon can update its internal data structures. The ideal was to have the daemon handle all core functionalities.
 
 ## API
 ### int shmget(key_t key, size_t size, int shmflg)
@@ -63,26 +61,25 @@ SHM_NORESERVE: Ignored.
 `shmflg` also contains Linux like file permissions ('rwxrwxrwx') to be set on the created segment.
 For every shared memory segment we have a structure as follows:
 ```rust
-pub struct SysvShmIdDs {
-	shm_perm: SysvIpcPerm,    /* Ownership and permissions */
+pub struct ShmIdDs {
+	shm_perm: IpcPerm,    /* Ownership and permissions */
 	shm_segsz: usize,   /* Size of segment (bytes) */
-    shm_atime: Option<SystemTime>,/* Last attach time */
-    shm_dtime: Option<SystemTime>, /* Last detach time */
-    shm_ctime: Option<SystemTime>, /* Creation time/time of last modification via shmctl() */
+	shm_atime: Option<TimeSpec>,/* Last attach time */
+	shm_dtime: Option<TimeSpec>, /* Last detach time */
+	shm_ctime: Option<TimeSpec>, /* Creation time/time of last modification via shmctl() */
 	shm_cpid: usize   ,/* PID of creator */
 	shm_lpid: usize,   /* PID of last shmat(2)/shmdt(2) */
 	shm_nattch: i64,  /* No. of current attaches */
 }
 
 ```
-Here we need to know the pid of the creator. It would be best if we could get the pid and gid of
-the process which has opened the fd. Otherwise relibc should get and relay it which is breaking our
+We use xopen to get the pid, gid and uid of the  Otherwise relibc should get and relay it which is breaking our
 promise to keep the daemon independent.
 
 Size of the segment should get rounded up to a multiple of page size. Which is
 `syscall::PAGE_SIZE` for now. Then we have:
 ```rust
-pub struct SysvIpcPerm {
+pub struct IpcPerm {
 	key: KeyT,
 	permission: u16,
 	uid: u32, // TODO: these must be system defined types for uid, ...
@@ -120,7 +117,7 @@ Returns the start address of the mapped memory or '-1' if it fails which means `
 
 If possible provided `shmaddr` will be used as the start address (depends on `ipcd` and `mmap`). 
 
-A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `SysvShmIdDs`. So the relibc
+A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `ShmIdDs`. So the relibc
 should inform the daemon of the memory map. **This is a bad design because daemon state gets depended on outside
 code.**
 
@@ -143,13 +140,13 @@ reverses the actions of `shmat()`.
 
 Return '0' on success and '-1' on failure. In the latter case `errno` should be read to find the cause.
 
-A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `SysvShmIdDs`. 
+A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `ShmIdDs`. 
 
 ### int shmctl(int shid, int op, struct shmid_ds *buf)
 
 Has these functions:
-- IPC_STAT, SHM_STAT, SHM_STAT_ANY: Get a copy of `SysvShmIdDs` in `buf`.
-- IPC_SET: Change some fields of `SysvShmIdDs`.
+- IPC_STAT, SHM_STAT, SHM_STAT_ANY: Get a copy of `ShmIdDs` in `buf`.
+- IPC_SET: Change some fields of `ShmIdDs`.
 - IPC_RMID: Mark the segment for destruction.
 - IPC_INFO, SHM_INFO: Get global shm limits
 
@@ -162,22 +159,18 @@ TODO
 # Drawbacks
 [drawbacks]: #drawbacks
 
-There is no technical drawback just that we are reimplementing an obsolete interface as 
-SysV interface is superseded by POSIX ipc/shm [mechanisms](https://pubs.opengroup.org/onlinepubs/007908799/xsh/shm_open.html).
-Therefore newer software should not rely on it. Although it may still be useful.
+There is no drawback.
+
+May worth noting there is another POSIX ipc/shm [real_time extension](https://pubs.opengroup.org/onlinepubs/007908799/xsh/shm_open.html) interface.
 
 # Alternatives
 [alternatives]: #alternatives
 
-The interface MUST be exposed by relibc to make dependent projects buildable. The alternative
-is to change those apps' source aka understand their logic and implement shared memory in some
-other way.
+Alternative approach is to extend tempfs to keep required housekeeping data and have the apps mmap the
+files. This is not a good idea because:
+- tempfs is designed to handle apps' file system usage. Apps wanting to share memory
+segments has nothing to do with file system. We want nothing to do with inodes here.
+- ipcd already has the mechanisms of mmap implemented.
  
 # Unresolved questions
 [unresolved]: #unresolved-questions
-
-Is that the way FDs are used in this design aligned with Redox design philosophy?
-We share data structures between relibc and the daemon which defines the way commands are
-conveyed.
-
-In the most simple form a command id following its arguments (defined by the command).
