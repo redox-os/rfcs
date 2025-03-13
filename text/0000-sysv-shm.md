@@ -6,7 +6,7 @@
 # Summary
 [summary]: #summary
 
-Implement SysV [shm](https://pubs.opengroup.org/onlinepubs/9799919799/functions/V2_chap02.html#tag_16_07)
+Implement POSIX [shm](https://pubs.opengroup.org/onlinepubs/9799919799/functions/V2_chap02.html#tag_16_07)
 function family.
 - [shmget()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmget.html)
 - [shmat()](https://pubs.opengroup.org/onlinepubs/9799919799/functions/shmat.html)
@@ -21,45 +21,18 @@ Enables building of the projects that depend on it (like PostgreSQL).
 # Detailed design
 [design]: #detailed-design
 ## Overview
-This is an extension to ipcd to keep and return so housekeeping data for the memory segments
+This is an extension to `ipcd` to keep and return some housekeeping data for the memory segments
 it allocates and assigns.
 
-(ipcd)<->(relibc)<->(application)
+`ipcd` keeps list of ShmHandles as this:
+```rust
+pub struct ShmHandle {
+    buffer: Option<MmapGuard>,
+    refs: usize
+}
+```
 
-shm keeps housekeeping data and implements the core functionalities which are:
-1. Create a mapping between shm keys and reserved memory segments and manage them
-2. Manage segment permissions
-3. Manage segments life cycle
-
-relibc exposes functions to application and also mmap()s the segments to process memory space.
-
-General workflow is as follows:
-- A process calls `shmget()` to get a shm id.
-- The process calls `shmat()` with that id to get the shared memory mapped to its memory space.
-- A call to 
-
-
-## API
-### int shmget(key_t key, size_t size, int shmflg)
-Get the id of the new or already existing shared memory segment.
-
-If key is the value of IPC_PRIVATE it means the segment is not to be shared and IPC_CREAT is implied.
-
-A dictionary is used to keep the links between assigned shm ids and allocated segments `HashMap<u64, usize>`.
-The behavior of the function depends on the `shmflg` as follows:
-
-IPC_CREAT: Create new segment. key argument is ignored.
-
-IPC_EXCL: Is valid only when combined with IPC_CREAT. If the key exists, call fails.
-
-SHM_HUGETLB: Ignored.
-
-SHM_HUGE_2MB, SHM_HUGE_1GB: See SHM_HUGETLB.
-
-SHM_NORESERVE: Ignored.
-
-`shmflg` also contains Linux like file permissions ('rwxrwxrwx') to be set on the created segment.
-For every shared memory segment we have a structure as follows:
+For every shared memory segment we add these fields:
 ```rust
 pub struct ShmIdDs {
 	shm_perm: IpcPerm,    /* Ownership and permissions */
@@ -73,10 +46,9 @@ pub struct ShmIdDs {
 }
 
 ```
-We use xopen to get the pid, gid and uid of the  Otherwise relibc should get and relay it which is breaking our
-promise to keep the daemon independent.
+We use `xopen` to get the pid, gid and uid of the caller instead of `open`.
 
-Size of the segment should get rounded up to a multiple of page size. Which is
+The size of the segment should get rounded up to a multiple of the system memory page size. Which is
 `syscall::PAGE_SIZE` for now. Then we have:
 ```rust
 pub struct IpcPerm {
@@ -89,8 +61,43 @@ pub struct IpcPerm {
 	shm: File // Return value of open("/scheme/shm/")
 }
 ```
-User and group ids plus permission are set according to the `shmflg`. So the uid and gid of the calling
-process should be known from the fd to the daemon.
+
+A dictionary is used to keep the links between assigned shm ids and allocated segments `HashMap<u64, usize>`.
+
+`shm` keeps housekeeping data and implements the core functionalities which are:
+1. Creating a mapping between shm keys and reserved memory segments and managing them
+2. Managing segments permissions
+3. Manageing segments life cycle
+
+relibc exposes the mentioned functions to application and also mmap()s the segments to process memory.
+
+General workflow is as follows:
+- A process calls `shmget()` to get a shm id.
+- The process then calls `shmat()` with that id to get the shared memory segment mapped to its memory space.
+- A call to `shmdt()` by the process reverses the previous step.
+- The process can query info about the shm segments or change its permissions by calling `shmctl()`.
+
+
+## API
+### int shmget(key_t key, size_t size, int shmflg)
+Get the id of the new or already existing shared memory segment.
+
+If `key` is the value of IPC_PRIVATE it means the segment is not to be shared and IPC_CREAT is implied.
+
+The behavior of the function depends on the `shmflg` as follows:
+
+IPC_CREAT: Create a new segment. key argument is ignored.
+
+IPC_EXCL: Is valid only when combined with IPC_CREAT. If the key exists, call fails.
+
+SHM_HUGETLB: Ignored.
+
+SHM_HUGE_2MB, SHM_HUGE_1GB: See SHM_HUGETLB.
+
+SHM_NORESERVE: Ignored.
+
+`shmflg` also contains Linux like file permissions ('rwxrwxrwx') to be set on the created segment.
+
 
 `shmget` return '-1' on error and a shm id otherwise.
 
@@ -99,7 +106,7 @@ EACESS: Calling process does not have the required permission according to file 
 
 EEXIST: When both IPC_EXCL and IPC_CREAT are specified but the shm segment already exists.
 
-EINVAL: `size` is greater than the size of requested segment.
+EINVAL: `size` is greater than the size of the requested segment.
 
 ENOENT: No segment exists for the given key and IPC_CREAT was not specified.
 
@@ -126,7 +133,7 @@ The behavior of the function depends on the `shmflg` as follows:
 SHM_RND: Round down the start address to the nearest multiple of `SHMLBA`. Should look if there is a
 Redox counterpart for that constant.
 
-SHM_EXEC: Allows the content of the segment to be executed (How does it relate to x permission? Guess x
+SHM_EXEC: Allow the content of the segment to be executed (How does it relate to x permission? Guess x
 is ignored)
 
 SHM_RDONLY: Process should have read permission. Without it r/w is assumed and attachment fails if the
@@ -138,7 +145,7 @@ SHM_REMAP: Replace current mappings in the address range (Applicable?)
 Detaches the shared memory segment located at the address specified by `shmaddr`. In other words
 reverses the actions of `shmat()`.
 
-Return '0' on success and '-1' on failure. In the latter case `errno` should be read to find the cause.
+Returns '0' on success and '-1' on failure. In the latter case `errno` should be read to find the cause.
 
 A successful call updates `shm_atime`, `shm_lpid` and `shm_nattch` in the `ShmIdDs`. 
 
@@ -148,7 +155,7 @@ Has these functions:
 - IPC_STAT, SHM_STAT, SHM_STAT_ANY: Get a copy of `ShmIdDs` in `buf`.
 - IPC_SET: Change some fields of `ShmIdDs`.
 - IPC_RMID: Mark the segment for destruction.
-- IPC_INFO, SHM_INFO: Get global shm limits
+- IPC_INFO, SHM_INFO: Get global shm limits.
 
 #### Errors
 TODO
@@ -161,7 +168,7 @@ TODO
 
 There is no drawback.
 
-May worth noting there is another POSIX ipc/shm [real_time extension](https://pubs.opengroup.org/onlinepubs/007908799/xsh/shm_open.html) interface.
+It may worth noting that there is another POSIX ipc/shm [real_time extension](https://pubs.opengroup.org/onlinepubs/007908799/xsh/shm_open.html) interface.
 
 # Alternatives
 [alternatives]: #alternatives
@@ -174,3 +181,5 @@ segments has nothing to do with file system. We want nothing to do with inodes h
  
 # Unresolved questions
 [unresolved]: #unresolved-questions
+Is extending the ipcd the best solution? Maybe tempfs is more suited as it has permissions checking
+already implemented. Maybe all functionalities could merge into one daemon.
