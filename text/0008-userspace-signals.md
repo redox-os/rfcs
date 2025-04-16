@@ -226,7 +226,7 @@ This is highly likely possible to pass in an array per signal, using the pending
 
 Acquire+Release+Relaxed should be sufficient, but for now it is on a correctness basis assumed that the implementation uses SeqCst.
 
-## Acknowledgements
+# Acknowledgements
 
 This RFC has been developed as part of the _Unix-style Signals_ project. The project is funded through [NGI Zero Core](https://nlnet.nl/core), a fund established by [NLnet](https://nlnet.nl) with financial support from the European Commission's [Next Generation Internet](https://ngi.eu) program. Learn more at the [NLnet project page](https://nlnet.nl/project/RedoxOS-Signals).
 
