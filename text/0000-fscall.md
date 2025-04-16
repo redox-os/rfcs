@@ -73,7 +73,7 @@ according to the following table
 | 5    | fstatvfs   | TODO: buf size/version | N/A     | buffer    | to client |
 | 6    | fsync      | flags (TODO: datasync?)| N/A     | N/A       | N/A       |
 | 7    | ftruncate  | new size               | N/A     | N/A       | N/A       |
-| 8    | futimens   | N/A (TODO?)            | N/A     | N/A       | N/A       |
+| 8    | futimens   | N/A (TODO?)            | N/A     | times     | to server |
 |------|------------|------------------------|---------|-----------|-----------|
 | 9    | link       | TODO (sendfd?)         | TODO?   | path?     | to server |
 | 10   | unlinkat   | flags (e.g., is_dir)   | N/A     | utf8 path | to server |
