@@ -1,13 +1,13 @@
 - Feature Name: fscall
 - Start Date: 2025-04-16
-- RFC PR: (leave this empty)
+- RFC PR: https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/29
 - Redox Issue: (leave this empty)
 
 # Summary
 [summary]: #summary
 
 There are currently 8 miscellaneous filesystem syscalls that can trivially be converted to `SYS_CALL` with a standardized `metadata` format, and another 5 syscalls once we transition to fd-based directory operations.
-This would reduce the number of syscalls from (as of procmgr) 36 to 23, or 21 when `MKNS` and `OPEN` are removed.
+This would reduce the number of syscalls from (as of procmgr) 36 to 25, or 21 when `MKNS`, `OPEN`, `FRENAME`, and `LINK`, are removed.
 
 # Motivation
 [motivation]: #motivation
@@ -33,19 +33,19 @@ The 8 syscalls
 
 will henceforth be denoted _legacy fs-metadata syscalls_, whereas
 
-- `SYS_LINK`
 - `SYS_RMDIR`
 - `SYS_UNLINK`
 - `SYS_FPATH`
-- ~~`SYS_FRENAME`~~ (TODO: how to replace this?)
 
 shall be called _legacy dirfd-based syscalls_.
 The legacy syscalls
 
-- `SYS_OPEN` and
+- `SYS_OPEN`,
+- `SYS_LINK`,
+- `SYS_FRENAME`, and
 - `SYS_MKNS`
 
-have been intentionally omitted from this RFC, even though they are in the same category, as there is a separate RFC just for openat.
+will be omitted from this RFC, as it is less obvious what the replacements will look like, and since openat has a separate RFC.
 
 ## New
 
@@ -66,26 +66,27 @@ according to the following table
 
 | kind | name       | arg1                   | arg2    | payload   | direction |
 |------|------------|------------------------|---------|-----------|-----------|
-| 1    | fchmod     | new_mode               | N/A     | N/A       | N/A       |
-| 2    | fchown     | new_uid lo, new_gid hi | new_gid | N/A       | N/A       |
-| 3    | getdents   | opaque_offset          | N/A     | buffer    | to client |
-| 4    | fstat      | TODO: buf size/version | N/A     | buffer    | to client |
-| 5    | fstatvfs   | TODO: buf size/version | N/A     | buffer    | to client |
-| 6    | fsync      | flags (TODO: datasync?)| N/A     | N/A       | N/A       |
-| 7    | ftruncate  | new size               | N/A     | N/A       | N/A       |
-| 8    | futimens   | N/A (TODO?)            | N/A     | times     | to server |
+| 1    | fchmod     | new_mode               | RSVDZ   | N/A       | N/A       |
+| 2    | fchown     | new_uid lo, new_gid hi | RSVDZ   | N/A       | N/A       |
+| 3    | getdents   | opaque_offset          | RSVDZ   | buffer    | to client |
+| 4    | fstat      | RSVDZ: buf size/version| RSVDZ   | buffer    | to client |
+| 5    | fstatvfs   | RSVDZ: buf size/version| RSVDZ   | buffer    | to client |
+| 6    | fsync      | flags (like fdatasync) | RSVDZ   | N/A       | N/A       |
+| 7    | ftruncate  | new size               | RSVDZ   | N/A       | N/A       |
+| 8    | futimens   | RSVDZ                  | RSVDZ   | times     | to server |
 |------|------------|------------------------|---------|-----------|-----------|
-| 9    | link       | TODO (sendfd?)         | TODO?   | path?     | to server |
-| 10   | unlinkat   | flags (e.g., is_dir)   | N/A     | utf8 path | to server |
-| 11   | realpathat | N/A                    | N/A     | utf8 path | to client |
-| 12   | renameat   | TODO (sendfd?)         | TODO?   | path?     | to server |
+| 10   | unlinkat   | flags (e.g., is_dir)   | RSVDZ   | utf8 path | to server |
+| 11   | realpathat | RSVDZ                  | RSVDZ   | utf8 path | to client |
+
+(Where RSVDZ means "reserved - must be zero".)
 
 It should be relatively straightforward for all schemes supporting path calls, to switch over to these dirfd-based ones.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-It makes `SYS_CALL` more complex (although mostly insignificant).
+- It makes `SYS_CALL` more complex (although mostly insignificant).
+- The kernel will not be able to enforce utf-8 for paths sent via this mechanism, but whether there should exist a separate SYS_CALL just for that, is highly debatable.
 
 # Alternatives
 [alternatives]: #alternatives
@@ -96,9 +97,4 @@ That would however require information to be passed other ways, such as whether 
 # Unresolved questions
 [unresolved]: #unresolved-questions
 
-How should `FRENAME` (and unimplemented `LINK`) be handled?
-Should they take one fd and a relative path, or two fds to send files?
-In the latter case, they would use `SYS_SENDFD` as backend, with some kernel logic to determine whether the sent fd is from the same scheme.
-With this restriction lifted, it would be possible to link across schemes, but it might be difficult to implement this persistent e.g. for filesystems.
-
-Should this RFC be split into non-path syscalls that can be replaced now, and another RFC after openat is completed?
+Are there any unresolved questions?
