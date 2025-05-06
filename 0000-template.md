@@ -6,7 +6,7 @@
 # Summary
 [summary]: #summary
 
-One for explanation of the feature.
+One paragraph explanation of the feature.
 
 # Motivation
 [motivation]: #motivation
