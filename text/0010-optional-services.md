@@ -39,7 +39,8 @@ User services may be started at any time once the core services monitor indicate
 - The `/usr/lib/init.d` and `/etc/init.d` directories contain `*.toml` files and subdirectories with `*.toml` files that are all parsed into a list of services hereby referred to as the "registry".
 - When the user service monitor starts, it reads each `*.toml` file in these directories to get the information it needs to start and manage each of it's services.
 - These files should each contain one service.
-- The `[service]` table contains the following fields:   
+- The `[service]` table contains the following fields: 
+    - `name`: String - Used to identify the service
     - `command`: String - as you would type it in the terminal, including arguments
     - `scheme` String - name/path: see unresolved questions
     - `restart_behavior`: String - [see the cooresponding subseciton](./0010-optional-services.md?ref_type=heads#restart-behavior)
