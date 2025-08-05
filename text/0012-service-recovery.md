@@ -28,6 +28,8 @@ This creates the potential to recover from errors in core drivers and services t
 
 - See [the optional services rfc](./0010-optional-services.md?ref_type=heads#failure-detection) for one existing recovery method.
 
+- When a service exits with code 0 then it's been stopped properly. How could other exit codes be used to determine how a service should be recovered?
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
