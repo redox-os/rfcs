@@ -7,7 +7,7 @@
 [summary]: #summary
 Redox's service monitoring and control infrastructure will be split into either "Core" low level required services and "User/optional" services, or "System" services and "per-user" services that operate as the root user and non-root user respectively. 
 This RFC covers the behavior of the services monitor and its constituent services 
-speficicaly:
+specifically:
 1. [Service Startup](./0010-optional-services.md?ref_type=heads#service-startup)
 2. [Service Shutdown](./0010-optional-services.md?ref_type=heads#service-shutdown)
 3. [Failure Detection and Recovery](./0010-optional-services.md?ref_type=heads#failure-detection-restart-and-recovery)
@@ -43,7 +43,7 @@ User services may be started at any time once the core services monitor indicate
     - `name`: String - Used to identify the service
     - `command`: String - as you would type it in the terminal, including arguments
     - `scheme` String - name/path: see unresolved questions
-    - `restart_behavior`: String - [see the cooresponding subseciton](./0010-optional-services.md?ref_type=heads#restart-behavior)
+    - `restart_behavior`: String - [see the corresponding subsection](./0010-optional-services.md?ref_type=heads#restart-behavior)
     - `init_after`: String - One or no name of a service that is the one run before this on system startup. This is used to order services during system startup. The first services to be started should name `service-monitor` here.
      - `always_after`: String - Same as `init after` but the named service is always started right before this table's. If a name is specified, then `init_after` is ignored.
     - `depends`: [String] - A list of other user services required for this one to start and run.
@@ -55,7 +55,7 @@ User services may be started at any time once the core services monitor indicate
     ```toml
     [[drivers]]
     name = String # This is the name of the device/driver
-    # The following 6 fields are used to identify the device and some may be ommited depending on the driver.
+    # The following 6 fields are used to identify the device and some may be omitted depending on the driver.
     class = u8 # This is the type of driver. 1 for storage, 2 for networking, 3 for graphics, etc.
     subclass =  u8 # For storage would be 0 for virtio, 1 for IDE, 8 for NVME, etc.
     interface = u8 # E.g. for xhcid: class = 0x0C (serial), subclass = 3 (USB), and interface = 0x30 (XHCI)
@@ -78,7 +78,7 @@ User services may be started at any time once the core services monitor indicate
     5. If a service starts successfully, then the service name(s) started are overwritten into the payload and separated by spaces.
 
 - The service monitor uses the information from the registry to build a`std::process::Command`:
-    - This starts the daemon, and once this spawn returns Ok and the child has exited, the service has been daemonized and its scheme can be opened, and that fd will be used for recording stats. Eventually Unix Domain Sockets will be used to help secure the socket between services and the service monitor. Once the service monitor has successfully opened a scheme, that service's running state is recorded.
+    - This starts the daemon, and once this spawn returns Ok and the child has exited, the service has been demonized and its scheme can be opened, and that fd will be used for recording stats. Eventually Unix Domain Sockets will be used to help secure the socket between services and the service monitor. Once the service monitor has successfully opened a scheme, that service's running state is recorded.
     - If the service is a driver then it's `command` field should be populated with `pcid-spawner <driver(s)>.toml` for now. The drivers in that file will be searched for a matching name to the `[[service]]` entry. 
     - When the `pcid-spawner` is integrated into the service monitor the `command` field in the `[[drivers]]` will be used, and the one in the `[[service]]` will be ignored. 
     - If a registered service is started without the service monitor (i.e. running the `command` manually), then it cannot be started by the service monitor, and it will be treated as a normal process.
@@ -163,11 +163,11 @@ Why should we *not* do this?
 - Adding an additional registry folder for non-init/per-user daemons?
 - is having only one or no name required before attempting to start a service adequate for eliminating dependency loops and accommodating cross dependent daemons?
 - is the depends array enough to properly shut services down in order? 
-- How to handle when the payload buffer is too large? Maybe error with the required length of the buffer and preform a seperate read for the data? Maybe impose limits on service name length and number of services one can depend on.
+- How to handle when the payload buffer is too large? Maybe error with the required length of the buffer and preform a separate read for the data? Maybe impose limits on service name length and number of services one can depend on.
  Could the system service monitor binary be used for per-user monitors? Maybe this could be done with launch arguments (I guess this doesn't necessitate the same binary though)? Maybe a per-user service monitor would function too differently?
 - Detailed discussion for the per-user service monitor may be more appropriate in the dynamic driver loading RFC? This would be good to keep in mind for development though to maybe start the default user's monitor at boot for security proof of concept.
 - Environment vars as `service` toml fields? Maybe as a one-shot bash script service? Should env vars be removed from startup entirely?
 - Can the service monitor be set to automatically shut down a service once all open fds to that service have been closed through the stats crate? Or would this functionality be too service specific?
 - What else is needed to start up a service?
 - If the system monitor and lifecycle here is a system service monitor then additional fields in the service `toml` may be required for orchestrating startup and shutdown between daemons in the initfs and rootfs?
-- Shoudl shutdown timeout be a service toml field?
+- Should shutdown timeout be a service toml field?
