@@ -5,6 +5,8 @@
 
 # Summary
 [summary]: #summary
+The service monitor aims to fill existing gaps in the way that Redox handles services, daemons, and drivers. This RFC discusses the general lifecycle and handling for these services. Some core system services and drivers necessitate further discussion but for most drivers and daemons the following completely outlines their interaction with the service monitor.  
+
 Redox's service monitoring and control infrastructure will be split into either "Core" low level required services and "User/optional" services, or "System" services and "per-user" services that operate as the root user and non-root user respectively. 
 This RFC covers the behavior of the services monitor and its constituent services 
 specifically:
@@ -16,14 +18,32 @@ For clarification:
 - In many places "user service monitor" is shortened to "service monitor". 
 - The core service monitor is specified if it is referenced. This is still an unresolved question.
 - The core, and user/optional monitor both can refer to a system services monitor.
-- A "per-user" may also be referenced (not the same as just "user service monitor") and refers to a daemon run with a non-root uid.
+- A "per-user" may also be referenced (not the same as just "user service monitor") and refers to a daemon started on user request, inheriting permissions defined by the user.
 - __TODO:__ decide between system/per-user and core/optional architecture, or some other alternative, and clean up this wording. Leaning towards the former. 
 
 Additional details on the bigger idea this is planned to play into [in this repo on GitLab](https://gitlab.redox-os.org/CharlliePhillips/service-monitor-rsoc2025_planning) and the other markdown files in this repo.
 # Motivation
 [motivation]: #motivation
 
-Service monitor & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Having none or one monolithic service monitor for all system services and drivers could pose issues for the security and stability of Redox. There are also reasons to be written.
+Service monitor & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Having none or one monolithic service monitor for all system services and drivers could pose issues for the security and stability of Redox.
+
+Use Cases:
+- Lingering:
+    - A user can configure a service to keep running after they logout. One use case of this would for a user to keep their web server running while away from the system.
+- Parallel System Initialization:
+    - The service monitor can build a dependency graph and start independent services in separate threads. This could significantly improve Redox's time to boot.
+- Service & Driver Recovery:
+    - While the service monitor is continuously updating service statistics it can detect when a service is misbehaving and restart or potentially recover that service to minimize the impact on the rest of the system.
+ Dynamic Driver Loading:
+    - Hot-Swap devices don't need their drivers running if they are not connected. Other system components can communicate to the service monitor that a newly attached device needs a driver loaded.
+    - It is not always desired to have drivers running for attached/integrated devices either. I.e. unloading WiFi/Bluetooth drivers when turning off wireless communications (airplane mode).
+- Easier Driver & Service Management:
+    - Organizing per-service configuration into individual files instead of combining them into init scripts will make it easier to implement partial service overriding. Overriding is helpful for making modifications to a service's configuration persist through updates.
+    - The service monitor provides standardized methods for interacting with services. This can be utilized by TUI or GUI utilities for system management.
+- Debugging & Benchmarking:
+    - The service monitor can expose information indicating how much a service is used by the system.
+- Graceful System Shutdown:
+    - Since the service monitor continues to track services after initialing them, it can also properly prepare them for shutdown.
 
 # Detailed design
 [design]: #detailed-design
