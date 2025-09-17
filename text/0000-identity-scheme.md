@@ -21,11 +21,11 @@ To fix this, this proposal introduces a kernel-level identity_scheme to replace 
 # Detailed design
 [design]: #detailed-design
 
-### 1\. The identity scheme and identity fd
+## The identity scheme and identity fd
 
 A new scheme, identity scheme will be implemented within the kernel. This scheme is solely responsible for creating, managing, and interpreting identity resources. An `identity_fd` is a file descriptor that represents a resource managed by this scheme. This resource contains information equivalent to traditional UIDs, GIDs, and supplementary groups.
 
-### 2\. Kernel `Context` Integration
+## Kernel `Context` Integration
 
 The in-kernel `Context` struct for each process will be modified to hold an `identity_fd` directly, replacing the current `euid` and `egid` integer fields.
 
@@ -40,7 +40,7 @@ pub struct Context {
 
 This `identity_fd` is not present in the process's file descriptor table, making it impossible for userspace to directly `close()`, `dup()`, or otherwise manipulate it. 
 
-### 3\. Automatic Syscall Propagation
+## Automatic Syscall Propagation
 
 When a process executes any system call that results in a request to a scheme, the kernel will automatically:
 
@@ -48,12 +48,12 @@ When a process executes any system call that results in a request to a scheme, t
 2. Attach a duplicate of this `identity_fd` to the request packet sent to the target scheme. 
     The kernel will insert the FD into the scheme's file table at UserScheme::read. The scheme can then read from this FD to determine the caller's UID/GID and perform permission checks.
 
-### 4\. `procmgr` and Setting Identity FD
+## `procmgr` and Setting Identity FD
 The identity_fd for a new process will be set up by procmgr during fork.
 procmgr will dup() the caller's identity_fd (which is enclosed in the fork request) and use a privileged operation (sendfd to a special new_ctxt_fd) to install it into the child's Context.
 `procmgr` will `dup()` a caller's `identity_fd` that enclosed to `fork request` and use a privileged operation (`sendfd` to a special `new_ctxt_fd`) to install it into the child's `Context`.
 
-### 5\. Handling Intermediaries like `nsmgr`
+## Handling Intermediaries like `nsmgr`
 
 This design explicitly handles the authority delegation problem.
 
@@ -64,7 +64,7 @@ This design explicitly handles the authority delegation problem.
 5. If this capability is present, the kernel allows the operation and forwards the client's `identity_fd` to the target scheme. If not, the request is denied.
     This ensures that only trusted system services can act on behalf of other users.
 
-### 6\. Privilege Management (`procmgr`, `setresugid`, and `sudo`)
+## Privilege Management (`procmgr`, `setresugid`, and `sudo`)
 
 - `setresugid`: This operation will be managed by the identity scheme. To change a process's identity, a process executes setresugid on its own `proc_fd` and sends the request to procmgr, just as it does with the current method. procmgr will then call setresugid on the `identity_fd` corresponding to the process handle.
   The identity_scheme will validate this request by checking if procmgr's own identity_fd possesses the setresugid execution capability. This highly privileged capability is granted to procmgr at boot time.
