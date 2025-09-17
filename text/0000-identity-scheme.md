@@ -5,11 +5,13 @@
 
 
 # Summary
+[summary]: #summary
 
 This RFC proposes the introduction of a kernel-level `identity_scheme` to represent user and group identities (UIDs/GIDs) as file descriptors, referred to as `identity_fd`s. Instead of passing integer UID/GID values, system call requests will include an `identity_fd` representing the caller's identity. This `fd` will be held directly within the process's kernel `Context`, inaccessible from its userspace file table, ensuring that a process cannot tamper with its own identity. The kernel will be responsible for automatically attaching this `identity_fd` to all outgoing requests to other schemes, creating a secure and unforgeable method of identity propagation.
 
 
 # Motivation
+[motivation]: #motivation
 
 Redox OS currently uses traditional, integer-based UIDs and GIDs for access control, but this model has two major flaws. First, these integers are a form of ambient authority, not unforgeable capabilities. Second and more critically, the model breaks when an intermediary service like nsmgr is used, as it masks the original user's identity and prevents the target scheme from performing valid permission checks.
 
@@ -17,6 +19,7 @@ To fix this, this proposal introduces a kernel-level identity_scheme to replace 
 
 
 # Detailed design
+[design]: #detailed-design
 
 ### 1\. The identity scheme and identity fd
 
@@ -69,6 +72,7 @@ This design explicitly handles the authority delegation problem.
 
 
 # Drawbacks
+[drawbacks]: #drawbacks
 
 - Performance Overhead: This design will significantly increase the number of system calls. Each request to a scheme now involves the kernel duplicating an `fd`, and the receiving scheme must accept it, read from it, and close it. This adds considerable overhead compared to passing simple integers. While optimizations may be possible later, the initial performance impact could be substantial.
 - Migration Effort: This is a fundamental change to the OS's security architecture. Every scheme in the system must be updated to stop using integer UIDs/GIDs from `CallerCtx` and instead handle the incoming `identity_fd`.
@@ -76,10 +80,12 @@ This design explicitly handles the authority delegation problem.
 
 
 # Alternatives
+[alternatives]: #alternatives
 
 - Maintain the Status Quo: The issue with intermediaries like nsmgr can be addressed by extending `openat` with a callerctx mask.
 
 # Unresolved questions
+[unresolved]: #unresolved-questions
 
 - User/Group Management: Where should the logic for creating, deleting, and modifying users/groups reside? Should `procmgr` be given capability `fd`s to manage this, or should a new dedicated userspace scheme be created?
 - `fstat` and Inode Ownership: How can `fstat` return the owner of a file as an `identity_fd`? Associating a persistent `identity_fd` with every inode on a filesystem seems infeasible, as it would quickly lead to file descriptor exhaustion (`EMFILE`) for the filesystem scheme.
