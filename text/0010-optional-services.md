@@ -5,7 +5,7 @@
 
 # Summary
 [summary]: #summary
-The service monitor aims to fill existing gaps in the way that Redox handles services, daemons, and drivers. This RFC discusses the general lifecycle and handling for these services. The service-monitor is highly configurable and intended to be used with a variety of system configurations. Some core system services and drivers necessitate further discussion but for most drivers and daemons the following completely outlines their interaction with the service monitor.  
+The service monitor aims to fill existing gaps in the way that Redox handles services, daemons, and drivers. This RFC discusses the general lifecycle and handling for these services. The service-monitor is highly configurable and intended to be used with a variety of system configurations. Some core system services and drivers necessitate further discussion but for most drivers and daemons the following completely outlines their interaction with the service monitor.
 
 This RFC covers the behavior of the services monitor and its constituent services 
 specifically:
@@ -99,6 +99,11 @@ User services may be started at any time once the core services monitor indicate
 When a service monitor is started it is passed a configuration file in TOML format. The name of this file is used as the name of the service-monitor instance, and its scheme name. Beyond this a service-monitor instance behaves like a standard service so that, for example, one service-monitor could start from the ramfs at boot to then start one from the rootfs, which then starts a user-specific instance upon login. The ramfs monitor would collect data on its services including the rootfs monitor, and the same for the rootfs monitor and a per-user monitor.
 
 The service-monitor configuration file contains the following fields:
+    ```toml
+    registry = # A string path to the folder containing this service monitor's registry files.
+    heartbeat_interval = # How frequently this service monitor's registry in integer milliseconds.
+    detached = # A list of names for the services in the registry that are monitored by this service monitor, but not started by it.
+    ```
 
 ## Service Shutdown
 1. Service shutdown is triggered by the user service monitor sending the termination signal (`SIGTERM`) to that process.
@@ -121,11 +126,26 @@ TODO - Link RFC on ACPI, PCI/core system behavior.
 
 ## Monitoring, Failure Detection, Restart, and Recovery
 ### Monitoring and Data Collection
-- The service monitor performs a "heartbeat" check on an interval determined in the configuration for the service monitor. On each heartbeat the service monitor gathers statistics on each daemon. This is done using a `StatMsg` struct serialized to RON, and includes the following fields:
-
+- The service monitor performs a "heartbeat" check on an interval determined in the configuration for the service monitor. On each heartbeat the service monitor gathers statistics on each daemon. This is done using a `StatMsg` struct serialized to RON and written to the payload of a `SYS_CALL`, and includes the following fields:
+    ```rs
+    state: Option<String> // String corresponding to the ServiceState enum (Running, Detached, Stopped, Faulted) - This field is the only one that is filled by the service monitor.
+    reads: Option<u64> // Number of times 'read()' was called on this service.
+    writes: Option<u64> // Number of times 'write()' was called on this service.,
+    opens: Option<u64> // Number of times this service's scheme was opened.
+    closes: Option<u64> // Number of times this service's scheme was closed.
+    calls: Option<u64> // Number of times 'sys_call()' was called on this service.
+    bytes: Option<u64> // The size of this service's scheme in bytes.
+    init_time: Option<u64> // The time that this service was initialized in milliseconds.
+    pid: Option<u64> // The process ID of this service. This field will be removed once capability based security is ready and implemented in the service-monitor and service stats library.
+    extended: Option<HashMap<String, String>> // This maps custom statistic names to their serialized values. 
+    ```
+- Each of these fields is an option so that, if necessary, specific statistics may be requested instead of all of them at once. 
+    - A `StatMsg` sent with some values `None` will not have those values filled by the service
+    - If a service responds with a `None` value in this struct after a `Some(_)` value was sent then that data is unavailable for that service.
 
 - These stats are stored, and updated by the service monitor for access by other applications.
 - A service-monitor instance can also provide it's statistics the same way as the services that it monitors. This is vital for using hierarchical service-monitor instances and is how applications calling a service-monitor instance determine which services it is responsible for.
+- When requesting the stats for a service-monitor the `StatMsg` is serialized and sent by itself on the payload, and one of it's custom statistics is a list of the services it monitors. To get the stats of a specific service the service's name and a 0 byte should be prepended to the `StatMsg`.
 
 ### Restarting a service
 - A service can be restarted which follows the shutdown and then startup procedure on a running service.
@@ -187,3 +207,4 @@ Why should we *not* do this?
 - What else is needed to start up a service?
 - Should shutdown timeout be a service toml field?
 - Get service names from the `service.toml` file for that service instead of an explicit name field?
+- Detached services should be replaced by a list of capabilities a service-monitor needs to acquire for proper function?
