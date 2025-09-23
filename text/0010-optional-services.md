@@ -5,27 +5,19 @@
 
 # Summary
 [summary]: #summary
-The service monitor aims to fill existing gaps in the way that Redox handles services, daemons, and drivers. This RFC discusses the general lifecycle and handling for these services. Some core system services and drivers necessitate further discussion but for most drivers and daemons the following completely outlines their interaction with the service monitor.  
+The service monitor aims to fill existing gaps in the way that Redox handles services, daemons, and drivers. This RFC discusses the general lifecycle and handling for these services. The service-monitor is highly configurable and intended to be used with a variety of system configurations. Some core system services and drivers necessitate further discussion but for most drivers and daemons the following completely outlines their interaction with the service monitor.  
 
-Redox's service monitoring and control infrastructure will be split into either "Core" low level required services and "User/optional" services, or "System" services and "per-user" services that operate as the root user and non-root user respectively. 
 This RFC covers the behavior of the services monitor and its constituent services 
 specifically:
 1. [Service Startup](./0010-optional-services.md?ref_type=heads#service-startup)
 2. [Service Shutdown](./0010-optional-services.md?ref_type=heads#service-shutdown)
 3. [Failure Detection and Recovery](./0010-optional-services.md?ref_type=heads#failure-detection-restart-and-recovery)
 
-For clarification:
-- In many places "user service monitor" is shortened to "service monitor". 
-- The core service monitor is specified if it is referenced. This is still an unresolved question.
-- The core, and user/optional monitor both can refer to a system services monitor.
-- A "per-user" may also be referenced (not the same as just "user service monitor") and refers to a daemon started on user request, inheriting permissions defined by the user.
-- __TODO:__ decide between system/per-user and core/optional architecture, or some other alternative, and clean up this wording. Leaning towards the former. 
-
 Additional details on the bigger idea this is planned to play into [in this repo on GitLab](https://gitlab.redox-os.org/CharlliePhillips/service-monitor-rsoc2025_planning) and the other markdown files in this repo.
 # Motivation
 [motivation]: #motivation
 
-Service monitor & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Having none or one monolithic service monitor for all system services and drivers could pose issues for the security and stability of Redox.
+Service monitoring & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Having none or one monolithic service monitor for all system services and drivers could pose issues for the security and stability of Redox.
 
 Use Cases:
 - Lingering:
@@ -47,7 +39,6 @@ Use Cases:
 
 # Detailed design
 [design]: #detailed-design
-
 - The `usermon` library contains a few static functions and enum(s) for interacting with the service monitor defined in this section.
 This library may be added to and documented elsewhere as it is implemented.
 
@@ -104,6 +95,11 @@ User services may be started at any time once the core services monitor indicate
     - If a registered service is started without the service monitor (i.e. running the `command` manually), then it cannot be started by the service monitor, and it will be treated as a normal process.
     - In the future, services should be able to start more dynamically. For example, when a program attempts to access that service's scheme but it is stopped. This is discussed [in the RFC here](./0011-dynamic-drivers.md).
 
+### Service Monitor Startup
+When a service monitor is started it is passed a configuration file in TOML format. The name of this file is used as the name of the service-monitor instance, and its scheme name. Beyond this a service-monitor instance behaves like a standard service so that, for example, one service-monitor could start from the ramfs at boot to then start one from the rootfs, which then starts a user-specific instance upon login. The ramfs monitor would collect data on its services including the rootfs monitor, and the same for the rootfs monitor and a per-user monitor.
+
+The service-monitor configuration file contains the following fields:
+
 ## Service Shutdown
 1. Service shutdown is triggered by the user service monitor sending the termination signal (`SIGTERM`) to that process.
 3. The service that is about to shut down has its last set of statistics recorded.
@@ -123,10 +119,17 @@ When the service monitor receives the system shutdown notification (through acpi
 The order in which services are shutdown is determined by their `depends` field, so a service cannot be stopped until all the ones that depend on it have shut down.
 TODO - Link RFC on ACPI, PCI/core system behavior.
 
-## Failure Detection, Restart, and Recovery
+## Monitoring, Failure Detection, Restart, and Recovery
+### Monitoring and Data Collection
+- The service monitor performs a "heartbeat" check on an interval determined in the configuration for the service monitor. On each heartbeat the service monitor gathers statistics on each daemon. This is done using a `StatMsg` struct serialized to RON, and includes the following fields:
+
+
+- These stats are stored, and updated by the service monitor for access by other applications.
+- A service-monitor instance can also provide it's statistics the same way as the services that it monitors. This is vital for using hierarchical service-monitor instances and is how applications calling a service-monitor instance determine which services it is responsible for.
+
 ### Restarting a service
 - A service can be restarted which follows the shutdown and then startup procedure on a running service.
-- This can be requested through the service monitor's API by calling `SYS_CALL` on its  scheme with the metadata produced by `usermon::restart()` and the service's name on the payload buffer.
+- This can be requested through the service monitor's API by calling `SYS_CALL` on its scheme with the metadata produced by `usermon::restart()` and the service's name on the payload buffer.
 
 ### Restart Behavior
 Each service has a default restart behavior specified in the registry. This can be temporarily overwritten with an optional argument (as in option type?) to `req_shutdown()` or the service monitor API. Each option is an enum that can be converted from and into a string used for the toml. The options for restart behavior are:
@@ -136,23 +139,17 @@ Each service has a default restart behavior specified in the registry. This can 
 - To modify a service's restart behavior call `SYS_CALL` on the service monitor's scheme with the metadata array produced by `usermon::behavior(Restart::*)` and the service's name on the payload buffer. - see unresolved questions
 
 ### Failure Detection
-- The service monitor performs a "heartbeat" check every (3s?) for the statistics on each daemon.  
-- When the service monitor detects a service that stopped due to some failure its state is recorded as faulted.  
+- When the service monitor preforms a heartbeat check and detects a service that stopped due to some failure its state is recorded as faulted.  
 - If the service monitor did not shut down a service, and the restart behavior allows, it will be automatically restarted.  
 One other way service faults can be detected and potentially recovered is:
-- Each call the service monitor makes to its  constituent services is made with a timeout of 50?ms.
+- Each call the service monitor makes to its constituent services is made with a timeout of 50?ms.
     - If the call takes longer than this, and its restart behavior allows, the service will be restarted.
-    - If the restart behavior prohibits then the service will just be sent `SIGTERM` (then likely killed).  
+    - If the restart behavior prohibits then the service will just be sent `SIGTERM` (then likely killed).
 
 __Further recovery methods will be outlined in [this RFC](./0012-service-recovery.md).__
 
 ## Security Considerations
-- Any control or "write" operations to the service monitor or its  services will require the root user to perform . 
-- Other users can still request/read statistics from the service monitor.
-- This service monitor may serve as a template for a per-user service monitor for services that should run as a non-root user. - See unresolved questions
-    - This (system) service monitor could start per-user service monitors on user login.
-    - The per-user service -monitors will allow root and that user full access over them.
-    - This will allow for services to persist between user sessions. This is commonly referred to as "lingering".
+The service monitor will be configurable so that it may be used as a system services monitor, a per-user services monitor, or for any other use case where a service management system may be needed. The plan for Redox's security system is to move away from more traditional user-based security and implement a capability based permission system. When starting a service, that service will send a statistics, and potentially a control capability. These capabilities should function in some ways like a file descriptor and will be sent using Unix domain sockets. With a statistics capability a service-monitor can only read statistics from a service, and with the control capability a service-monitor can stop a running service and change it's restart behavior.
 
 # Drawbacks
 [drawbacks]: #drawbacks
@@ -182,12 +179,11 @@ Why should we *not* do this?
 - Should restart behavior on reboot persist in the registry after reboot or be temporary? Maybe this could be a boolean parameter?
 - Adding an additional registry folder for non-init/per-user daemons?
 - is having only one or no name required before attempting to start a service adequate for eliminating dependency loops and accommodating cross dependent daemons?
-- is the depends array enough to properly shut services down in order? 
+- is the depends array enough to properly shut services down in order? - No, need to differentiate between initfs & rootfs. 
 - How to handle when the payload buffer is too large? Maybe error with the required length of the buffer and preform a separate read for the data? Maybe impose limits on service name length and number of services one can depend on.
- Could the system service monitor binary be used for per-user monitors? Maybe this could be done with launch arguments (I guess this doesn't necessitate the same binary though)? Maybe a per-user service monitor would function too differently?
+- Could the system service monitor binary be used for per-user monitors? Maybe this could be done with launch arguments (I guess this doesn't necessitate the same binary though)? Maybe a per-user service monitor would function too differently?
 - Detailed discussion for the per-user service monitor may be more appropriate in the dynamic driver loading RFC? This would be good to keep in mind for development though to maybe start the default user's monitor at boot for security proof of concept.
-- Environment vars as `service` toml fields? Maybe as a one-shot bash script service? Should env vars be removed from startup entirely?
 - Can the service monitor be set to automatically shut down a service once all open fds to that service have been closed through the stats crate? Or would this functionality be too service specific?
 - What else is needed to start up a service?
-- If the system monitor and lifecycle here is a system service monitor then additional fields in the service `toml` may be required for orchestrating startup and shutdown between daemons in the initfs and rootfs?
 - Should shutdown timeout be a service toml field?
+- Get service names from the `service.toml` file for that service instead of an explicit name field?
