@@ -5,7 +5,7 @@
 
 # Summary
 [summary]: #summary
-Discussion on how the service monitor recovers faulting services.
+Discussion on how the service-monitor recovers faulting services.
 
 For clarification:
 - In many places "user service monitor" is shortened to "service monitor". 
@@ -45,6 +45,6 @@ Why should we *not* do this?
 
 If a core daemon fails, then what should the user service monitor do?
 - Maybe if the core service monitor can successfully recover that daemon, the user monitor is restarted?
-- Maybe the service monitor could attempt to gracefully shutdown running services (and potentially other applications later i.e. save your work before a crash)?
+- Maybe the service-monitor could attempt to gracefully shutdown running services (and potentially other applications later i.e. save your work before a crash)?
 - The core monitor could send a message to the user monitor telling it what failed, and those service names could be included in the depends list? This could allow "less destructive" recovery preserving as much of the pre-failure environment as possible.
 - Combining the last two points, although maybe most of this is stretch goals or future work?

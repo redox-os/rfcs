@@ -5,7 +5,7 @@
 
 # Summary
 [summary]: #summary
-Discussion on how the service monitor could dynamically load drivers.
+Discussion on how the service-monitor could dynamically load drivers.
 
 For clarification:
 - In many places "user service monitor" is shortened to "service monitor". 
@@ -20,7 +20,7 @@ Additional details on the bigger idea this is planned to play into [in this repo
 [motivation]: #motivation
 
 Some drivers do not need to run until a particular device is attached. 
-Since the service monitor can control and monitor services, programs needing a particular service could get to one that isn't running through the service monitor. 
+Since the service-monitor can control and monitor services, programs needing a particular service could get to one that isn't running through the service-monitor. 
 - This RFC is intended to document discussion on functionality that will be implemented after RSoC2025.
 
 # Detailed design
@@ -32,8 +32,8 @@ __This Section Documents Potential Methods for Dynamic Driver Loading__
 - From Bjorn3:
     - Redox OS may be able to get away with fully implicit ordering. Basically, when loading the service files it would register all schemes that are exposed according to the service files and then pass the scheme fd when starting the executable that is responsible for this scheme. If another process needs this scheme, it will see the scheme, but block until the responsible service is started.  
   
-- So when the service monitor is started, it reserves the names for each scheme in its registry and reserves them.
-- When any program on the system attempts to open that scheme, the service monitor starts that service.
+- So when the service-monitor is started, it reserves the names for each scheme in its registry and reserves them.
+- When any program on the system attempts to open that scheme, the service-monitor starts that service.
 - The opened service gets its real scheme and completes the original open request.
 - Further calls on that service's scheme will be completed by that running service. 
 - This means handling of user permissions would be the responsibility of the individual service.
@@ -41,25 +41,25 @@ __This Section Documents Potential Methods for Dynamic Driver Loading__
 - Right now mounting rootfs involves iterating through the root scheme to find all available disks, and those disks won't be listed there if their drivers have not already been started. This necessitates some explicit ordering of services.
 
 ## Notification Interface
-- Handlers for additional `SYS_CALL`s could be added to the service monitor to notify it of hardware and system changes. 
+- Handlers for additional `SYS_CALL`s could be added to the service-monitor to notify it of hardware and system changes. 
 - This would likely involve communication with `pcid` and `acpid` among other services.
 - TODO - Link RFC on ACPI, PCI/core system behavior.
 
 ## Hardware Detection Daemon
 - Another idea is to create a second daemon for monitoring hardware changes.
-- This may combine methods described here and issue start requests to the service monitor.
+- This may combine methods described here and issue start requests to the service-monitor.
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 Why should we *not* do this?
 
-This opens a door for a user to give arbitrary input to the service monitor, which runs as root. This risk can be mitigated though.
+This opens a door for a user to give arbitrary input to the service-monitor, which runs as root. This risk can be mitigated though.
 
 # Alternatives
 [alternatives]: #alternatives
 
-- Adding some other kind of specific hooks/event handlers into the service monitor to determine when certain services should start.
+- Adding some other kind of specific hooks/event handlers into the service-monitor to determine when certain services should start.
 
 # Unresolved questions
 [unresolved]: #unresolved-questions
