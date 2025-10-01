@@ -21,7 +21,7 @@ Additional details on the bigger idea this is planned to play into [in this repo
 # Motivation
 [motivation]: #motivation
 
-Service monitoring & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Having none or one monolithic service-monitor for all system services and drivers could pose issues for the security and stability of Redox.
+Service monitoring & management systems are extremely important for workstations, servers, appliances, and many other computing environments. Building a bespoke service management system for Redox allows its service architecture to be properly accommodated, and open the door for a range of common use cases. Having none or one monolithic service-monitor for all system services and drivers could pose issues for the security and stability of Redox.
 
 Use Cases:
 - Lingering:
@@ -50,36 +50,39 @@ Use Cases:
 ## Service Startup
 - When starting the service-monitor a directory is specified containing `*.toml` files that are all parsed into a list of services hereby referred to as the "registry".
 - When the user service monitor starts, it reads each `*.toml` file in these directories to get the information it needs to start and manage each of it's services.
-- These files should each contain one service.
-- The `[service]` table contains the following fields: 
-    - `name`: String - Used to identify the service, this must be unique.
-    - `command`: String - as you would type it in the terminal, including arguments
-    - `scheme` String - name/path: see unresolved questions
-    - `restart_behavior`: String - [see the corresponding subsection](./0010-optional-services.md?ref_type=heads#restart-behavior)
-    - `init_after`: String - One or no name of a service that is the one run before this on system startup. This is used to order services during system startup. The first services to be started should name `service-monitor` here.
-     - `always_after`: String - Same as `init after` but the named service is always started right before this table's. If a name is specified, then `init_after` is ignored.
-    - `depends`: [String] - A list of other user services required for this one to start and run.
-    If one of those services is stopped, then this one will be as well.
-    The services listed here are not affected by actions on this one. 
-    This is a one way relationship like the `partOf` option for systemd units.
-    - `envs`: {VAR = "String value"} - A map of environment variables to their values needed to start a service. This is likely to be removed in the future.
-    - `driver` (optional): The presence of the `driver` string indicates that the named file should be passed to pcid-spawner to start it. The named file(s) should contain one `[[drivers]]` entry.  
-        - The pcid-spawner code will be wrapped into the service-monitor.
-        - These files already exist in `/etc/pcid.d` and `/etc/pcid/initfs.toml` and contain the following fields: 
-        ```toml
-        [[drivers]]
-        name = String # This is the name of the device/driver
-        # The following 6 fields are used to identify the device and some may be omitted depending on the driver.
-        class = u8 # This is the type of driver. 1 for storage, 2 for networking, 3 for graphics, etc.
-        subclass =  u8 # For storage would be 0 for virtio, 1 for IDE, 8 for NVME, etc.
-        interface = u8 # E.g. for xhcid: class = 0x0C (serial), subclass = 3 (USB), and interface = 0x30 (XHCI)
-        vendor = u32 # Vendor ID (HW vendor specific)
-        device = u16 # Device ID (HW specific)
-        ids = {u16 = [u16, ], } # Map of Vendor IDs to Device IDs for a driver that supports multiple devices from the same vendor
-        ##
-        command = String # Command to start driver daemon
-        use_channel = bool # For DMA devices?
-        ```
+- These files should each contain one service with the following fields:
+    ```toml
+    [service]
+    name = String # Used to identify the service, this must be unique.
+    command = String # as you would type it in the terminal, including arguments
+    scheme = String # name/path: see unresolved questions
+    restart_behavior = String # [see the corresponding subsection](./0010-optional-services.md?ref_type=heads#restart-behavior)
+    init_after = String # One or no name of a service that is the one run before this on system startup. This is used to order services during system startup. The first services to be started should name `service-monitor` here.
+    always_after = String # Same as `init after` but the named service is always started right before this table's. If a name is specified, then `init_after` is ignored.
+    depends = [String] # A list of other user services required for this one to start and run.
+        # If one of those services is stopped, then this one will be as well.
+        # The services listed here are not affected by actions on this one. 
+        # This is a one way relationship like the `partOf` option for systemd units.
+    envs = {VAR = "String value"} # A map of environment variables to their values needed to start a service. This is likely to be removed in the future.
+    driver = String # (optional) The presence of the `driver` string indicates that the named file should be passed to pcid-spawner to start it. 
+        # The named file(s) should contain one `[[drivers]]` entry.  
+    ``` 
+    - The pcid-spawner code used for starting drivers will be wrapped into the service-monitor.
+    - These files already exist in `/etc/pcid.d` and `/etc/pcid/initfs.toml` and contain the following fields: 
+    ```toml
+    [[drivers]]
+    name = String # This is the name of the device/driver
+    # The following 6 fields are used to identify the device and some may be omitted depending on the driver.
+    class = u8 # This is the type of driver. 1 for storage, 2 for networking, 3 for graphics, etc.
+    subclass =  u8 # For storage would be 0 for virtio, 1 for IDE, 8 for NVME, etc.
+    interface = u8 # E.g. for xhcid: class = 0x0C (serial), subclass = 3 (USB), and interface = 0x30 (XHCI)
+    vendor = u32 # Vendor ID (HW vendor specific)
+    device = u16 # Device ID (HW specific)
+    ids = {u16 = [u16, ], } # Map of Vendor IDs to Device IDs for a driver that supports multiple devices from the same vendor
+    ##
+    command = String # Command to start driver daemon
+    use_channel = bool # For DMA devices?
+    ```  
 - If a service is to be started by a service-monitor instance but is not monitored by it, then it is a "detached" service. Detached services only need a name, command, envs (if applicable), and ordering value included. If no scheme is provided in the registry file the service-monitor assumes that the service should be detached and will ignore other fields.
 - If a service is to be monitored by a service-monitor instance but is started elsewhere then it is a "pickup" service. Pickup services only need a name and a scheme value in their registry file, and if that name is specified in the service-monitor config file's "pickup" array then other fields will be ignored.
     
@@ -101,13 +104,12 @@ Use Cases:
 ### Service Monitor Startup
 - When a service monitor is started it is passed a configuration file in TOML format. The name of this file is used as the name of the service-monitor instance, and its scheme name. 
 - Beyond this a service-monitor instance behaves like a standard service so that, for example, one service-monitor could start from the ramfs at boot to then start one from the rootfs, which then starts a user-specific instance upon login. The ramfs monitor would collect data on its services including the rootfs monitor, and the same for the rootfs monitor and a per-user monitor.
-
-The service-monitor configuration file contains the following fields:
-    ```toml
-    registry = # A string path to the folder containing this service monitor's registry files.
-    heartbeat_interval = # How frequently this service monitor's registry in integer milliseconds.
-    detached = # A list of names for the services in the registry that are monitored by this service monitor, but not started by it.
-    ```
+- A service-monitor configuration file contains the following fields:  
+```toml
+registry = String # A path to the folder containing this service monitor's registry files.
+heartbeat_interval = Integer # How frequently this service monitor's registry in milliseconds.
+pickup = [String] # A list of names for the services in the registry that are monitored by this service monitor, but not started by it.
+```
 
 - Using the ordering information from the registry, services are queued up by the service-monitor for initialization in layers. The first layer, and first services started, are those with the service-monitor named in their ordering field. The next layer contains services that all have one of the first layer's services in their ordering field and so on. For example:
     - Layer 1: `[service1, service2]` - Both of these services have the name of a service-monitor in their ordering field.
@@ -117,7 +119,7 @@ The service-monitor configuration file contains the following fields:
     - While exact service dependencies are being worked out this system can be used to define a linear (one after the other) startup ordering that is currently used by `init`.
 
 ## Service Shutdown
-1. Service shutdown is triggered by the user service monitor sending the termination signal (`SIGTERM`) to that process.
+1. Service shutdown is triggered by a service-monitor with control capability on that service by sending the termination signal (`SIGTERM`) to that process.
 3. The service that is about to shut down has its last set of statistics recorded.
 2. Any running services in the registry that list this one in their  `depends` list get their stats collected, and sent `SIGTERM` first.
 4. The service developer should write a handler for `SIGTERM` that gracefully shuts it down. 
@@ -148,7 +150,7 @@ TODO - Link RFC on ACPI, PCI/core system behavior.
     calls: Option<u64> // Number of times 'sys_call()' was called on this service.
     bytes: Option<u64> // The size of this service's scheme in bytes.
     init_time: Option<u64> // The time that this service was initialized in milliseconds.
-    pid: Option<u64> // The process ID of this service. This field will be removed once capability based security is ready and implemented in the service-monitor and service stats library.
+    pid: Option<u64> // The process ID of this service. This field may be removed or changed once capability based security is ready and implemented in the service-monitor and service stats library.
     extended: Option<HashMap<String, String>> // This maps custom statistic names to their serialized values. 
     ```
 - Each of these fields is an option so that, if necessary, specific statistics may be requested instead of all of them at once. 
