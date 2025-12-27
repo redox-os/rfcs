@@ -1,6 +1,6 @@
 - Feature Name: fdpath
 - Start Date: 2025-12-19
-- RFC PR: (leave this empty)
+- RFC PR: https://gitlab.redox-os.org/redox-os/rfcs/-/merge_requests/34
 - Redox Issue: (leave this empty)
 
 # Summary
