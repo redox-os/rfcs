@@ -36,4 +36,4 @@ This may be unfamiliar to most desktop Linux users, but NixOS, Android, and macO
 The FHS used by many Linux distros is not at all intuitive and can unnecessarily complicate sandboxing. There aren't many alternatives that are drastically different to this proposal.
 
 # Unresolved questions
-There are multiple different ways to store the signatures for executables, and it will partially depend on how the apps are packaged. Additionally, how metadata (such as a description) that sexist exists in `.desktop` can also be implemented in numerous ways.
+There are multiple different ways to store the signatures for executables, and it will partially depend on how the apps are packaged. Additionally, how metadata (such as a description) that exists in `.desktop` can also be implemented in numerous ways.
