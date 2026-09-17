@@ -164,3 +164,4 @@ When the Client closes `worker_fd`, the Worker scheme event loop receives a clos
 
 1. Worker-per-Handle vs. Worker-per-Process: Should Casper Broker spawn a dedicated `fileargs` worker for each client session, or should it create a handle for it?
 2. Place to store FD type: Should the in-kernel `FileDescriptor` struct store the FD type?
+3. Necessity of `ENOTCAPABLE`: Should Redox introduce a dedicated `ENOTCAPABLE` error code, or reuse `EPERM` or `EACCES`?
